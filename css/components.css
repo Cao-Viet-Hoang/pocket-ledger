@@ -371,6 +371,12 @@
 }
 .input::placeholder { color: var(--color-text-subtle); }
 .textarea { min-height: 90px; resize: vertical; }
+.textarea.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  white-space: pre;
+}
 
 .select {
   appearance: none;

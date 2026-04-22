@@ -1,41 +1,100 @@
 /**
  * App bootstrap.
- * - Loads data + locale
+ * - Loads locale
+ * - If Firebase credentials are stored, connects; otherwise shows the setup modal.
  * - Renders icons + topbar listeners
  * - Initializes router
- * - Handles language switch + quick-add modal
+ * - Wires language switch, quick-add, configure button
+ * - Re-renders current page whenever Store data changes
  */
 (function (global) {
   'use strict';
 
+  let routerStarted = false;
+
   async function boot() {
     try {
-      await Promise.all([I18n.init(), Store.load()]);
+      await I18n.init();
     } catch (err) {
-      console.error('Failed to bootstrap app', err);
-      document.getElementById('content').innerHTML = `
-        <div class="empty">
-          <div class="empty-icon" data-icon="alert"></div>
-          <h3>Failed to load data</h3>
-          <p class="text-muted">${err && err.message ? err.message : 'Unknown error'}</p>
-        </div>`;
-      Icons.render(document);
-      return;
+      console.error('Failed to load locales', err);
     }
 
     Icons.render(document);
     setupLanguageSwitcher();
     setupQuickAdd();
+    setupConfigureButton();
+    setupSidebarToggle();
     setupRoutingFromClicks();
 
     I18n.onChange(() => {
       I18n.applyTranslations(document);
-      Router.renderCurrent();
+      if (routerStarted) Router.renderCurrent();
       updateLangButtons();
     });
 
-    Router.init();
+    Store.onChange(() => {
+      if (!Store.isConfigured()) {
+        updateUserBadge();
+        return;
+      }
+      if (!routerStarted) {
+        Router.init();
+        routerStarted = true;
+      } else {
+        Router.renderCurrent();
+      }
+      updateUserBadge();
+    });
+
     updateLangButtons();
+    updateUserBadge();
+
+    const stored = Store.getStoredCredentials();
+    if (stored) {
+      showLoading();
+      try {
+        await Store.configure({ config: stored.config, username: stored.username, seedSample: false });
+      } catch (err) {
+        console.error('Auto-connect failed', err);
+        showSetup(err.message);
+      }
+    } else {
+      showSetup();
+    }
+  }
+
+  function showLoading() {
+    const content = document.getElementById('content');
+    if (!content) return;
+    content.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon" data-icon="clock"></div>
+        <h3>${I18n.t('app.connecting')}</h3>
+        <p class="text-muted">${I18n.t('app.connectingHint')}</p>
+      </div>`;
+    Icons.render(content);
+  }
+
+  function showSetup(errorMsg) {
+    const content = document.getElementById('content');
+    if (content) {
+      content.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon" data-icon="wallet"></div>
+          <h3>${I18n.t('setup.welcome')}</h3>
+          <p class="text-muted" style="max-width: 420px">${I18n.t('setup.welcomeHint')}</p>
+          ${errorMsg ? `<p class="text-expense" style="font-size: var(--fs-sm); margin-top: var(--space-3)">${errorMsg}</p>` : ''}
+          <button type="button" class="btn btn-primary" id="openSetupBtn" style="margin-top: var(--space-4)">
+            <span data-icon="plus"></span>
+            <span>${I18n.t('setup.connect')}</span>
+          </button>
+        </div>`;
+      Icons.render(content);
+      const btn = content.querySelector('#openSetupBtn');
+      if (btn) btn.addEventListener('click', () => Setup.open());
+    }
+    // Also immediately open the modal so user doesn't have to click.
+    Setup.open();
   }
 
   function setupLanguageSwitcher() {
@@ -51,6 +110,62 @@
     const lang = I18n.getLang();
     document.querySelectorAll('.lang-btn').forEach((btn) => {
       btn.classList.toggle('is-active', btn.dataset.lang === lang);
+    });
+  }
+
+  function updateUserBadge() {
+    const el = document.getElementById('userBadge');
+    if (!el) return;
+    const name = Store.getUsername();
+    if (name) {
+      el.style.display = '';
+      el.querySelector('.user-name').textContent = name;
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  function setupConfigureButton() {
+    const btn = document.getElementById('configureBtn');
+    if (btn) btn.addEventListener('click', () => Setup.open());
+
+    const dc = document.getElementById('disconnectBtn');
+    if (dc) dc.addEventListener('click', () => {
+      Forms.confirm({
+        title: I18n.t('setup.disconnectTitle'),
+        message: I18n.t('setup.disconnectHint'),
+        confirmLabel: I18n.t('setup.disconnect'),
+        variant: 'danger',
+        onConfirm: async () => {
+          routerStarted = false;
+          Store.disconnect();
+          showSetup();
+        }
+      });
+    });
+  }
+
+  function setupSidebarToggle() {
+    const toggle = document.getElementById('sidebarToggle');
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (!toggle || !sidebar || !backdrop) return;
+
+    const open = () => {
+      sidebar.classList.add('is-open');
+      backdrop.classList.add('is-open');
+    };
+    const close = () => {
+      sidebar.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+    };
+
+    toggle.addEventListener('click', () => {
+      if (sidebar.classList.contains('is-open')) close(); else open();
+    });
+    backdrop.addEventListener('click', close);
+    sidebar.querySelectorAll('[data-route]').forEach((link) => {
+      link.addEventListener('click', close);
     });
   }
 
@@ -70,77 +185,11 @@
   }
 
   function openQuickAdd() {
-    // Simple preview modal that showcases the add-transaction flow.
-    const cats = Store.getCategories();
-    const expenseCats = cats.filter((c) => c.type === 'expense');
-    const today = new Date().toISOString().slice(0, 10);
-
-    const bodyHTML = `
-      <div class="type-toggle" id="typeToggle">
-        <button type="button" class="is-active expense" data-type="expense">${I18n.t('txn.expense')}</button>
-        <button type="button" data-type="income">${I18n.t('txn.income')}</button>
-      </div>
-
-      <div class="amount-input">
-        <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="amountValue" autocomplete="off"/>
-      </div>
-
-      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
-        <div class="form-group">
-          <label class="form-label">${I18n.t('txn.category')}</label>
-          <select class="select" id="txnCat">
-            ${expenseCats.map((c) => `<option value="${c.id}">${I18n.t(c.nameKey)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">${I18n.t('txn.date')}</label>
-          <input type="date" class="input" value="${today}"/>
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom: var(--space-3)">
-        <label class="form-label">${I18n.t('txn.person')}</label>
-        <select class="select">
-          <option value="">—</option>
-          ${Store.getPeople().map((p) => `<option value="${p.id}">${p.name}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">${I18n.t('txn.note')}</label>
-        <textarea class="textarea" placeholder="${I18n.t('txn.description')}"></textarea>
-      </div>
-    `;
-
-    Modal.open({
-      title: I18n.t('action.add.transaction'),
-      subtitle: I18n.t('page.transactions.subtitle'),
-      bodyHTML,
-      actions: [
-        { label: I18n.t('action.cancel'), variant: 'secondary' },
-        { label: I18n.t('action.save'), variant: 'primary', onClick: () => Toast.show('UI preview — logic comes next phase') }
-      ]
-    });
-
-    // Wire the type toggle so the category list switches between income/expense
-    const root = document.getElementById('modalRoot');
-    const toggle = root.querySelector('#typeToggle');
-    const catSelect = root.querySelector('#txnCat');
-    toggle.querySelectorAll('button').forEach((b) => {
-      b.addEventListener('click', () => {
-        toggle.querySelectorAll('button').forEach((x) => x.classList.remove('is-active', 'income', 'expense'));
-        b.classList.add('is-active', b.dataset.type);
-        const filtered = cats.filter((c) => c.type === b.dataset.type);
-        catSelect.innerHTML = filtered.map((c) => `<option value="${c.id}">${I18n.t(c.nameKey)}</option>`).join('');
-      });
-    });
-
-    // Live format amount input
-    const amountInput = root.querySelector('#amountValue');
-    amountInput.addEventListener('input', () => {
-      const raw = amountInput.value.replace(/[^\d]/g, '');
-      const num = Number(raw) || 0;
-      amountInput.value = num ? num.toLocaleString('en-US') : '';
-    });
+    if (!Store.isConfigured()) {
+      Setup.open();
+      return;
+    }
+    Forms.transactionForm();
   }
 
   if (document.readyState === 'loading') {

@@ -15,8 +15,8 @@
 
   <link rel="stylesheet" href="css/variables.css" />
   <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/pages.css" />
 </head>
 <body>
@@ -58,6 +58,23 @@
       </nav>
 
       <div class="sidebar-footer">
+        <div class="user-badge" id="userBadge" style="display:none">
+          <span class="user-avatar" data-icon="user"></span>
+          <span class="user-info">
+            <span class="user-label" data-i18n="setup.connectedAs">Signed in as</span>
+            <span class="user-name"></span>
+          </span>
+        </div>
+        <div class="footer-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="configureBtn" title="Configure Firebase">
+            <span data-icon="edit"></span>
+            <span data-i18n="action.configure">Configure</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" id="disconnectBtn" title="Disconnect">
+            <span data-icon="close"></span>
+            <span data-i18n="setup.disconnect">Disconnect</span>
+          </button>
+        </div>
         <div class="language-switcher" role="group" aria-label="Language">
           <button type="button" class="lang-btn" data-lang="en">EN</button>
           <button type="button" class="lang-btn" data-lang="vi">VI</button>
@@ -120,14 +137,20 @@
     </div>
   </div>
 
+  <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
   <div class="modal-root" id="modalRoot" aria-hidden="true"></div>
   <div class="toast-root" id="toastRoot" aria-live="polite"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script src="js/icons.js"></script>
   <script src="js/formatters.js"></script>
   <script src="js/i18n.js"></script>
+  <script src="js/firebase-client.js"></script>
   <script src="js/store.js"></script>
   <script src="js/components/modal.js"></script>
+  <script src="js/components/forms.js"></script>
   <script src="js/components/charts.js"></script>
   <script src="js/components/loan-view.js"></script>
   <script src="js/pages/dashboard.js"></script>
@@ -136,6 +159,7 @@
   <script src="js/pages/borrowing.js"></script>
   <script src="js/pages/people.js"></script>
   <script src="js/pages/reports.js"></script>
+  <script src="js/setup.js"></script>
   <script src="js/router.js"></script>
   <script src="js/app.js"></script>
 </body>

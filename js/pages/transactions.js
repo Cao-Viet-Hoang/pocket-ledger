@@ -2,7 +2,7 @@
  * Transactions page.
  * - Search, type filter (all/income/expense), category filter
  * - Date range, sort
- * - Table of transactions with actions
+ * - Table of transactions with edit/delete actions
  */
 (function (global) {
   'use strict';
@@ -14,6 +14,12 @@
     range: '30d',        // 7d | 30d | thisMonth | lastMonth | all
     sort: 'dateDesc'     // dateDesc | dateAsc | amountDesc | amountAsc
   };
+
+  function escapeHTML(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   function rangeFilter(date, range) {
     const d = Fmt.parseDate(date);
@@ -64,7 +70,7 @@
 
   function renderRows(list) {
     if (!list.length) {
-      return `<tr><td colspan="5"><div class="empty"><div class="empty-icon" data-icon="search"></div><h3>No transactions</h3><p class="text-muted">Try adjusting your filters.</p></div></td></tr>`;
+      return `<tr><td colspan="6"><div class="empty"><div class="empty-icon" data-icon="search"></div><h3>${I18n.t('txn.empty')}</h3><p class="text-muted">${I18n.t('txn.emptyHint')}</p></div></td></tr>`;
     }
     return list
       .map((t) => {
@@ -73,12 +79,12 @@
         const sign = t.type === 'income' ? '+' : '-';
         const amountCls = t.type === 'income' ? 'text-income' : 'text-expense';
         return `
-          <tr>
+          <tr data-txn-id="${t.id}">
             <td>
               <div class="list-item" style="gap:12px;padding:0;border:0">
                 <span class="circle-icon ${cat ? cat.tone : ''}" data-icon="${cat ? cat.icon : 'exchange'}"></span>
                 <div class="list-item-main">
-                  <div class="list-item-title">${t.note || (cat ? I18n.t(cat.nameKey) : '')}</div>
+                  <div class="list-item-title">${escapeHTML(t.note || (cat ? I18n.t(cat.nameKey) : ''))}</div>
                   <div class="list-item-sub">${cat ? I18n.t(cat.nameKey) : ''}</div>
                 </div>
               </div>
@@ -90,10 +96,14 @@
               </span>
             </td>
             <td>${person
-              ? `<span class="flex items-center gap-2"><span class="avatar sm avatar-p${person.color || 1}">${Fmt.initials(person.name)}</span><span>${person.name}</span></span>`
+              ? `<span class="flex items-center gap-2"><span class="avatar sm avatar-p${person.color || 1}">${Fmt.initials(person.name)}</span><span>${escapeHTML(person.name)}</span></span>`
               : '<span class="text-subtle">—</span>'}</td>
             <td class="text-muted nowrap">${Fmt.formatDate(t.date, I18n.getLang())}</td>
             <td class="text-right nowrap amount ${amountCls}">${sign}${Fmt.formatAmount(t.amount, { absolute: true })}</td>
+            <td class="text-right nowrap">
+              <button class="icon-btn ghost" data-txn-action="edit" aria-label="${I18n.t('action.edit')}"><span data-icon="edit"></span></button>
+              <button class="icon-btn ghost" data-txn-action="delete" aria-label="${I18n.t('action.delete')}"><span data-icon="trash"></span></button>
+            </td>
           </tr>`;
       })
       .join('');
@@ -150,7 +160,7 @@
           <div class="toolbar">
             <div class="input-with-icon search">
               <span data-icon="search"></span>
-              <input id="txnSearch" class="input" type="search" value="${filterState.query}" placeholder="${I18n.t('action.search')}"/>
+              <input id="txnSearch" class="input" type="search" value="${escapeHTML(filterState.query)}" placeholder="${I18n.t('action.search')}"/>
             </div>
             <div class="segmented" id="txnType" role="tablist">
               <button data-type="all"     class="${filterState.type === 'all' ? 'is-active' : ''}">${I18n.t('txn.all')}</button>
@@ -173,6 +183,10 @@
               <option value="amountDesc" ${filterState.sort === 'amountDesc' ? 'selected' : ''}>${I18n.t('txn.sort.amountDesc')}</option>
               <option value="amountAsc"  ${filterState.sort === 'amountAsc' ? 'selected' : ''}>${I18n.t('txn.sort.amountAsc')}</option>
             </select>
+            <button class="btn btn-primary" id="addTxnBtn">
+              <span data-icon="plus"></span>
+              <span>${I18n.t('action.add')}</span>
+            </button>
           </div>
           <div class="table-scroll">
             <table class="table">
@@ -183,6 +197,7 @@
                   <th>${I18n.t('txn.person')}</th>
                   <th>${I18n.t('txn.date')}</th>
                   <th class="text-right">${I18n.t('txn.amount')}</th>
+                  <th class="text-right">${I18n.t('txn.actions')}</th>
                 </tr>
               </thead>
               <tbody id="txnRows">${renderRows(list)}</tbody>
@@ -192,11 +207,9 @@
       </div>
     `;
 
-    // Set selected value on category select (since 'selected' attr template-injection above)
     const catSelect = container.querySelector('#txnCategory');
     if (catSelect) catSelect.value = filterState.category;
 
-    // Wire events
     const searchInput = container.querySelector('#txnSearch');
     searchInput.addEventListener('input', (e) => {
       filterState.query = e.target.value;
@@ -221,6 +234,34 @@
       filterState.sort = e.target.value;
       updateRows(container);
     });
+
+    container.querySelector('#addTxnBtn').addEventListener('click', () => Forms.transactionForm());
+
+    wireRowActions(container);
+  }
+
+  function wireRowActions(container) {
+    container.querySelectorAll('#txnRows [data-txn-id]').forEach((tr) => {
+      const id = tr.dataset.txnId;
+      tr.querySelectorAll('[data-txn-action]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const action = btn.dataset.txnAction;
+          const txn = Store.getTransactions().find((t) => t.id === id);
+          if (!txn) return;
+          if (action === 'edit') {
+            Forms.transactionForm(txn);
+          } else if (action === 'delete') {
+            Forms.confirm({
+              title: I18n.t('action.delete.transaction'),
+              message: I18n.t('confirm.deleteTransaction'),
+              confirmLabel: I18n.t('action.delete'),
+              onConfirm: () => Store.deleteTransaction(id)
+            });
+          }
+        });
+      });
+    });
   }
 
   function updateRows(container) {
@@ -229,6 +270,7 @@
     if (tbody) {
       tbody.innerHTML = renderRows(list);
       Icons.render(tbody);
+      wireRowActions(container);
     }
   }
 

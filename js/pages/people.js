@@ -1,9 +1,16 @@
 /**
  * People page — contacts involved in transactions, loans and debts.
  * Each card shows: avatar, name, note, quick stats (owes you / you owe), txn count.
+ * Add / edit / delete via the Forms module.
  */
 (function (global) {
   'use strict';
+
+  function escapeHTML(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   function personCard(person) {
     const owed = Store.personOwedToUser(person.id);
@@ -11,14 +18,17 @@
     const txns = Store.personTransactions(person.id);
 
     return `
-      <article class="person-card">
+      <article class="person-card" data-person-id="${person.id}">
         <header class="person-head">
           <span class="avatar lg avatar-p${person.color || 1}">${Fmt.initials(person.name)}</span>
           <div style="flex:1;min-width:0">
-            <div class="person-name">${person.name}</div>
-            <div class="person-sub">${person.phone || person.note || ''}</div>
+            <div class="person-name">${escapeHTML(person.name)}</div>
+            <div class="person-sub">${escapeHTML(person.phone || person.note || '')}</div>
           </div>
-          <button class="icon-btn ghost" aria-label="${I18n.t('action.edit')}"><span data-icon="more-horizontal"></span></button>
+          <div class="person-actions">
+            <button class="icon-btn ghost" data-action="edit" aria-label="${I18n.t('action.edit')}"><span data-icon="edit"></span></button>
+            <button class="icon-btn ghost" data-action="delete" aria-label="${I18n.t('action.delete')}"><span data-icon="trash"></span></button>
+          </div>
         </header>
 
         <div class="person-stats">
@@ -37,6 +47,37 @@
           <span class="badge">${Fmt.formatDate(person.createdAt, I18n.getLang())}</span>
         </div>
       </article>`;
+  }
+
+  function renderGrid(container, list) {
+    const grid = container.querySelector('#peopleGrid');
+    if (!grid) return;
+    grid.innerHTML = list.length
+      ? list.map(personCard).join('')
+      : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="people"></div><h3>${I18n.t('people.empty')}</h3></div>`;
+    Icons.render(grid);
+    wireCardActions(container, list);
+  }
+
+  function wireCardActions(container, list) {
+    container.querySelectorAll('.person-card').forEach((card) => {
+      const id = card.dataset.personId;
+      const person = list.find((p) => p.id === id);
+      if (!person) return;
+      card.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Forms.personForm(person);
+      });
+      card.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Forms.confirm({
+          title: I18n.t('action.delete.person'),
+          message: I18n.t('confirm.deletePerson'),
+          confirmLabel: I18n.t('action.delete'),
+          onConfirm: () => Store.deletePerson(id)
+        });
+      });
+    });
   }
 
   function render(container) {
@@ -89,31 +130,29 @@
               <span data-icon="search"></span>
               <input id="peopleSearch" class="input" placeholder="${I18n.t('action.search')}" style="min-width:240px"/>
             </div>
-            <button class="btn btn-primary">
+            <button class="btn btn-primary" id="addPersonBtn">
               <span data-icon="plus"></span>
               <span>${I18n.t('action.add.person')}</span>
             </button>
           </div>
         </section>
 
-        <section class="grid grid-3" id="peopleGrid">
-          ${people.length
-            ? people.map(personCard).join('')
-            : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="people"></div><h3>${I18n.t('people.empty')}</h3></div>`}
-        </section>
+        <section class="grid grid-3" id="peopleGrid"></section>
       </div>
     `;
+
+    renderGrid(container, people);
+
+    container.querySelector('#addPersonBtn').addEventListener('click', () => Forms.personForm());
 
     const search = container.querySelector('#peopleSearch');
     if (search) {
       search.addEventListener('input', (e) => {
         const q = e.target.value.trim().toLowerCase();
-        const filtered = people.filter((p) => p.name.toLowerCase().includes(q) || (p.note || '').toLowerCase().includes(q));
-        const grid = container.querySelector('#peopleGrid');
-        grid.innerHTML = filtered.length
-          ? filtered.map(personCard).join('')
-          : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="search"></div><h3>No results</h3></div>`;
-        Icons.render(grid);
+        const filtered = people.filter((p) =>
+          p.name.toLowerCase().includes(q) || (p.note || '').toLowerCase().includes(q)
+        );
+        renderGrid(container, filtered);
       });
     }
   }

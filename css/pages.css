@@ -261,6 +261,12 @@
   align-items: center;
   gap: var(--space-3);
 }
+.person-actions {
+  display: flex;
+  gap: 4px;
+}
+.person-actions .icon-btn { width: 32px; height: 32px; }
+.person-actions .icon-btn svg { width: 16px; height: 16px; }
 .person-name {
   font-family: var(--font-display);
   font-weight: 700;
@@ -389,12 +395,14 @@
 .payment-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--color-divider);
 }
 .payment-item:last-child { border-bottom: 0; }
+.payment-item > :first-child { flex: 1; min-width: 0; }
+.payment-item .icon-btn { width: 32px; height: 32px; }
+.payment-item .icon-btn svg { width: 16px; height: 16px; }
 .payment-date {
   font-weight: 600;
   font-size: var(--fs-sm);

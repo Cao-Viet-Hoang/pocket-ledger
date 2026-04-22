@@ -19,8 +19,8 @@
     // Navigation
     dashboard: svg('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
     exchange: svg('<path d="M7 7h13"/><path d="m16 3 4 4-4 4"/><path d="M17 17H4"/><path d="m8 21-4-4 4-4"/>'),
-    'hand-coin': svg('<path d="M11 15h6a3 3 0 0 0 3-3c0-1-.5-2-1.5-2.5L12 6"/><path d="M3 10h2l3 2 2-1"/><path d="M3 14v5a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-8"/><circle cx="17" cy="5" r="2.5"/>'),
-    'hand-receive': svg('<path d="M13 9H7a3 3 0 0 0-3 3c0 1 .5 2 1.5 2.5L12 18"/><path d="M21 14h-2l-3-2-2 1"/><path d="M21 10V5a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v8"/><circle cx="7" cy="19" r="2.5"/>'),
+    'hand-coin': svg('<circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/>'),
+    'hand-receive': svg('<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/>'),
     people: svg('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5.5 6-5.5s6 2.3 6 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M15 14.5c2.5.2 5 1.9 5 4.5"/>'),
     chart: svg('<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/><circle cx="7" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="11" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="14" cy="13" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="6" r="1.3" fill="currentColor" stroke="none"/>'),
 

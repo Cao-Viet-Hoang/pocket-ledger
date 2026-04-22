@@ -174,7 +174,7 @@
         <section class="section-header">
           <div class="chip-group" id="loanFilterChips">${statusChips(opts.filterState)}</div>
           <div class="actions">
-            <button class="btn btn-primary">
+            <button class="btn btn-primary" id="loanNewBtn">
               <span data-icon="plus"></span>
               <span>${opts.newButtonLabel}</span>
             </button>
@@ -184,7 +184,7 @@
         <section class="grid grid-3" id="loanGrid">
           ${list.length
             ? list.map((l) => loanCard(l, opts)).join('')
-            : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="coins"></div><h3>No loans</h3><p class="text-muted">Nothing matches this filter.</p></div>`}
+            : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="coins"></div><h3>${I18n.t('loan.empty')}</h3></div>`}
         </section>
       </div>
     `;
@@ -198,6 +198,9 @@
         I18n.applyTranslations(container);
       });
     });
+
+    const newBtn = container.querySelector('#loanNewBtn');
+    if (newBtn) newBtn.addEventListener('click', () => Forms.loanForm(opts.kind));
 
     // Card click -> detail modal
     container.querySelectorAll('.loan-card').forEach((card) => {
@@ -219,14 +222,15 @@
 
     const historyHTML = payments.length
       ? payments.map((p) => `
-          <div class="payment-item">
+          <div class="payment-item" data-payment-id="${p.id}">
             <div>
               <div class="payment-date">${Fmt.formatDate(p.date, I18n.getLang())}</div>
               ${p.note ? `<div class="payment-note">${p.note}</div>` : ''}
             </div>
             <div class="payment-amount ${opts.kind === 'lending' ? 'text-income' : 'text-expense'}">${Fmt.formatAmount(p.amount, { absolute: true })}</div>
+            <button type="button" class="icon-btn ghost" data-payment-delete aria-label="${I18n.t('action.delete')}"><span data-icon="trash"></span></button>
           </div>`).join('')
-      : `<div class="empty"><div class="empty-icon" data-icon="receipt"></div><p class="text-muted">No payments yet.</p></div>`;
+      : `<div class="empty"><div class="empty-icon" data-icon="receipt"></div><p class="text-muted">${I18n.t('loan.noPayments')}</p></div>`;
 
     const bodyHTML = `
       <div class="flex items-center gap-3" style="margin-bottom: var(--space-4)">
@@ -266,15 +270,61 @@
       <div class="payment-history">${historyHTML}</div>
     `;
 
+    const editLabel = opts.kind === 'lending' ? I18n.t('action.edit.loan') : I18n.t('action.edit.debt');
+    const deleteLabel = opts.kind === 'lending' ? I18n.t('action.delete.loan') : I18n.t('action.delete.debt');
+
     Modal.open({
       title: opts.kind === 'lending' ? I18n.t('nav.lending') : I18n.t('nav.borrowing'),
       subtitle: `${I18n.t('loan.startDate')}: ${Fmt.formatDate(loan.startDate, I18n.getLang())}`,
       size: 'lg',
       bodyHTML,
       actions: [
-        { label: I18n.t('action.add.payment'), variant: 'primary', onClick: () => Toast.show('Record payment — coming in next phase') },
+        {
+          label: I18n.t('action.add.payment'),
+          variant: 'primary',
+          keepOpen: true,
+          onClick: () => Forms.paymentForm(opts.kind, loan)
+        },
+        {
+          label: editLabel,
+          variant: 'secondary',
+          keepOpen: true,
+          onClick: () => Forms.loanForm(opts.kind, loan)
+        },
+        {
+          label: deleteLabel,
+          variant: 'secondary',
+          keepOpen: true,
+          onClick: () => Forms.confirm({
+            title: deleteLabel,
+            message: I18n.t('confirm.deleteLoan'),
+            confirmLabel: I18n.t('action.delete'),
+            onConfirm: () => Store.deleteLoan(opts.kind, loan.id)
+          })
+        },
         { label: I18n.t('action.close'), variant: 'secondary' }
       ]
+    });
+
+    // Wire payment delete buttons
+    const root = document.getElementById('modalRoot');
+    root.querySelectorAll('[data-payment-delete]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = btn.closest('.payment-item');
+        const pid = item && item.dataset.paymentId;
+        const payment = (loan.payments || []).find((p) => p.id === pid);
+        if (!payment) return;
+        Forms.confirm({
+          title: I18n.t('action.delete'),
+          message: I18n.t('confirm.deleteTransaction'),
+          confirmLabel: I18n.t('action.delete'),
+          onConfirm: async () => {
+            await Store.removeLoanPayment(opts.kind, loan.id, payment);
+            Modal.close();
+          }
+        });
+      });
     });
   }
 
