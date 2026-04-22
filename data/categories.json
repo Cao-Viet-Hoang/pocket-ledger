@@ -1,0 +1,12 @@
+[
+  { "id": "salary", "nameKey": "cat.salary", "type": "income", "icon": "briefcase", "tone": "income" },
+  { "id": "bonus", "nameKey": "cat.bonus", "type": "income", "icon": "gift", "tone": "info" },
+  { "id": "other_income", "nameKey": "cat.otherIncome", "type": "income", "icon": "arrow-down-left", "tone": "primary" },
+  { "id": "food", "nameKey": "cat.food", "type": "expense", "icon": "bowl", "tone": "expense" },
+  { "id": "transport", "nameKey": "cat.transport", "type": "expense", "icon": "car", "tone": "info" },
+  { "id": "shopping", "nameKey": "cat.shopping", "type": "expense", "icon": "bag", "tone": "purple" },
+  { "id": "bills", "nameKey": "cat.bills", "type": "expense", "icon": "receipt", "tone": "warning" },
+  { "id": "entertainment", "nameKey": "cat.entertainment", "type": "expense", "icon": "music", "tone": "purple" },
+  { "id": "health", "nameKey": "cat.health", "type": "expense", "icon": "heart", "tone": "expense" },
+  { "id": "other_expense", "nameKey": "cat.otherExpense", "type": "expense", "icon": "arrow-up-right", "tone": "warning" }
+]

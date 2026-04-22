@@ -1,0 +1,60 @@
+[
+  {
+    "id": "l-001",
+    "personId": "p-001",
+    "principal": 5000000,
+    "startDate": "2026-02-15",
+    "dueDate": "2026-05-15",
+    "note": "Emergency loan",
+    "payments": [
+      { "id": "lp-001", "date": "2026-03-15", "amount": 1000000, "note": "First installment" },
+      { "id": "lp-002", "date": "2026-04-15", "amount": 1000000, "note": "Second installment" }
+    ]
+  },
+  {
+    "id": "l-002",
+    "personId": "p-003",
+    "principal": 2000000,
+    "startDate": "2026-03-01",
+    "dueDate": "2026-04-30",
+    "note": "Short term help",
+    "payments": [
+      { "id": "lp-003", "date": "2026-04-05", "amount": 500000, "note": "Partial" }
+    ]
+  },
+  {
+    "id": "l-003",
+    "personId": "p-002",
+    "principal": 8000000,
+    "startDate": "2025-11-20",
+    "dueDate": "2026-03-30",
+    "note": "Vehicle down payment",
+    "payments": [
+      { "id": "lp-004", "date": "2025-12-20", "amount": 2000000, "note": "Installment 1" },
+      { "id": "lp-005", "date": "2026-01-20", "amount": 2000000, "note": "Installment 2" },
+      { "id": "lp-006", "date": "2026-02-20", "amount": 2000000, "note": "Installment 3" }
+    ]
+  },
+  {
+    "id": "l-004",
+    "personId": "p-005",
+    "principal": 1500000,
+    "startDate": "2026-04-10",
+    "dueDate": "2026-05-10",
+    "note": "Lent for a trip",
+    "payments": []
+  },
+  {
+    "id": "l-005",
+    "personId": "p-004",
+    "principal": 3500000,
+    "startDate": "2025-10-05",
+    "dueDate": "2026-01-05",
+    "note": "Home repair",
+    "payments": [
+      { "id": "lp-007", "date": "2025-11-05", "amount": 1000000, "note": "Partial 1" },
+      { "id": "lp-008", "date": "2025-12-05", "amount": 1000000, "note": "Partial 2" },
+      { "id": "lp-009", "date": "2026-01-05", "amount": 1500000, "note": "Final settle" }
+    ]
+  }
+]

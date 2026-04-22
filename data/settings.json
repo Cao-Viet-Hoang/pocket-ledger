@@ -1,0 +1,10 @@
+{
+  "currency": {
+    "code": "VND",
+    "symbol": "₫",
+    "position": "suffix",
+    "decimals": 0
+  },
+  "openingBalance": 15000000,
+  "defaultLanguage": "en"
+}
