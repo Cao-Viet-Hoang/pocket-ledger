@@ -23,7 +23,7 @@
     query: '',
     type: 'all',         // all | income | expense
     category: 'all',
-    range: '30d',        // 7d | 30d | thisMonth | lastMonth | all | custom
+    range: 'thisMonth',  // 7d | 30d | thisMonth | lastMonth | all | custom
     customFrom: defaultFrom(),
     customTo: isoDate(Fmt.today()),
     sort: 'dateDesc'     // dateDesc | dateAsc | amountDesc | amountAsc
