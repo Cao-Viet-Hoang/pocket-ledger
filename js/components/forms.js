@@ -35,6 +35,11 @@
     return blank + people.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('');
   }
 
+  function accountOptionsHTML(accounts, { noneLabel = '' } = {}) {
+    const none = `<option value="">${escapeHTML(noneLabel)}</option>`;
+    return none + accounts.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
+  }
+
   function escapeHTML(str) {
     return String(str == null ? '' : str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -46,6 +51,7 @@
   function transactionForm(existing) {
     const cats = Store.getCategories();
     const people = Store.getPeople();
+    const accounts = Store.getAccounts();
     const isEdit = Boolean(existing);
     const initial = existing || {
       type: 'expense',
@@ -53,6 +59,7 @@
       category: (cats.find((c) => c.type === 'expense') || {}).id,
       date: todayISO(),
       personId: null,
+      accountId: null,
       note: ''
     };
 
@@ -79,9 +86,15 @@
           <input type="date" class="input" id="txnDate" value="${initial.date}"/>
         </div>
       </div>
-      <div class="form-group" style="margin-bottom: var(--space-3)">
-        <label class="form-label">${I18n.t('txn.person')}</label>
-        <select class="select" id="txnPerson">${peopleOptionsHTML(people)}</select>
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.account')}</label>
+          <select class="select" id="txnAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.person')}</label>
+          <select class="select" id="txnPerson">${peopleOptionsHTML(people)}</select>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">${I18n.t('txn.note')}</label>
@@ -107,13 +120,14 @@
             const category = root.querySelector('#txnCat').value;
             const date = root.querySelector('#txnDate').value;
             const personId = root.querySelector('#txnPerson').value || null;
+            const accountId = root.querySelector('#txnAccount').value || null;
             const note = root.querySelector('#txnNote').value.trim();
 
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!category) { Toast.show(I18n.t('form.categoryRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
 
-            const data = { type: selectedType, amount, category, date, personId, note };
+            const data = { type: selectedType, amount, category, date, personId, accountId, note };
             try {
               if (isEdit) await Store.updateTransaction(existing.id, data);
               else await Store.addTransaction(data);
@@ -142,9 +156,10 @@
       });
     });
 
-    // Pre-select current category/person after inner markup is rendered
+    // Pre-select current category/person/account after inner markup is rendered
     if (initial.category) catSelect.value = initial.category;
     if (initial.personId) root.querySelector('#txnPerson').value = initial.personId;
+    if (initial.accountId) root.querySelector('#txnAccount').value = initial.accountId;
 
     wireAmountInput(root.querySelector('#amountValue'));
   }

@@ -91,12 +91,13 @@
 
   function renderRows(list) {
     if (!list.length) {
-      return `<tr><td colspan="6"><div class="empty"><div class="empty-icon" data-icon="search"></div><h3>${I18n.t('txn.empty')}</h3><p class="text-muted">${I18n.t('txn.emptyHint')}</p></div></td></tr>`;
+      return `<tr><td colspan="7"><div class="empty"><div class="empty-icon" data-icon="search"></div><h3>${I18n.t('txn.empty')}</h3><p class="text-muted">${I18n.t('txn.emptyHint')}</p></div></td></tr>`;
     }
     return list
       .map((t) => {
         const cat = Store.getCategoryById(t.category);
         const person = t.personId ? Store.getPersonById(t.personId) : null;
+        const account = t.accountId ? Store.getAccountById(t.accountId) : null;
         const sign = t.type === 'income' ? '+' : '-';
         const amountCls = t.type === 'income' ? 'text-income' : 'text-expense';
         return `
@@ -119,6 +120,9 @@
             <td>${person
               ? `<span class="flex items-center gap-2"><span class="avatar sm avatar-p${person.color || 1}">${Fmt.initials(person.name)}</span><span>${escapeHTML(person.name)}</span></span>`
               : '<span class="text-subtle">—</span>'}</td>
+            <td class="nowrap">${account
+              ? `<span class="flex items-center gap-2"><span data-icon="${account.icon || 'wallet'}"></span><span>${escapeHTML(account.name)}</span></span>`
+              : `<span class="text-subtle">${I18n.t('txn.account.none')}</span>`}</td>
             <td class="text-muted nowrap">${Fmt.formatDate(t.date, I18n.getLang())}</td>
             <td class="text-right nowrap amount ${amountCls}">${sign}${Fmt.formatAmount(t.amount, { absolute: true })}</td>
             <td class="text-right nowrap">
@@ -221,6 +225,7 @@
                   <th>${I18n.t('txn.description')}</th>
                   <th>${I18n.t('txn.type')}</th>
                   <th>${I18n.t('txn.person')}</th>
+                  <th>${I18n.t('txn.account')}</th>
                   <th>${I18n.t('txn.date')}</th>
                   <th class="text-right">${I18n.t('txn.amount')}</th>
                   <th class="text-right">${I18n.t('txn.actions')}</th>

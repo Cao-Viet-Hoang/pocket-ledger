@@ -223,27 +223,55 @@
     return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
   }
 
+  // Signed delta that a transaction contributes to its linked account's balance:
+  // +amount for income, -amount for expense. Returns 0 if unlinked.
+  function txnAccountDelta(txn) {
+    if (!txn || !txn.accountId) return 0;
+    const amount = Number(txn.amount || 0);
+    return txn.type === 'income' ? amount : -amount;
+  }
+
+  async function applyAccountDelta(accountId, delta) {
+    if (!accountId || !delta) return;
+    const acc = state.accounts.find((a) => a.id === accountId);
+    if (!acc) return;
+    acc.balance = Number(acc.balance || 0) + delta;
+    await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
+  }
+
   async function addTransaction(data) {
     const id = data.id || genId('t');
-    const rec = Object.assign({ personId: null, note: '' }, data, { id });
+    const rec = Object.assign({ personId: null, accountId: null, note: '' }, data, { id });
+    if (!rec.accountId) rec.accountId = null;
     await FirebaseClient.setItem('transactions', id, rec);
     state.transactions.push(rec);
+    await applyAccountDelta(rec.accountId, txnAccountDelta(rec));
     emit();
     return rec;
   }
 
   async function updateTransaction(id, data) {
+    const prev = state.transactions.find((t) => t.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
     await FirebaseClient.updateItem('transactions', id, patch);
     const i = state.transactions.findIndex((t) => t.id === id);
     if (i >= 0) state.transactions[i] = Object.assign({}, state.transactions[i], patch);
+    // Rollback previous account effect, then apply new effect based on merged record.
+    if (prev) {
+      await applyAccountDelta(prev.accountId, -txnAccountDelta(prev));
+      const next = state.transactions[i];
+      await applyAccountDelta(next.accountId, txnAccountDelta(next));
+    }
     emit();
   }
 
   async function deleteTransaction(id) {
+    const prev = state.transactions.find((t) => t.id === id);
     await FirebaseClient.deleteItem('transactions', id);
     state.transactions = state.transactions.filter((t) => t.id !== id);
+    if (prev) await applyAccountDelta(prev.accountId, -txnAccountDelta(prev));
     emit();
   }
 
@@ -561,22 +589,27 @@
     });
   }
 
-  function currentBalance() {
-    // When the user has configured accounts, treat the sum of account balances
-    // as the authoritative cash position (accounts are where money actually lives).
-    // Otherwise, fall back to the journal-entry formula: opening + income - expense.
-    if (state.accounts.length > 0) return totalAccountsBalance();
+  // Cash not held in any tracked account: opening balance + signed sum of
+  // transactions with accountId == null. Transactions that mutate an account
+  // are already reflected in totalAccountsBalance() and are excluded here.
+  function cashBalance() {
+    const unlinked = state.transactions.filter((t) => !t.accountId);
     const opening = Number(state.settings.openingBalance || 0);
-    return opening + totalIncome() - totalExpense();
+    return opening + totalIncome(unlinked) - totalExpense(unlinked);
+  }
+
+  function currentBalance() {
+    // Authoritative spendable money = accounts + free-floating cash.
+    return totalAccountsBalance() + cashBalance();
   }
 
   function netWorth() {
-    // Total accessible wealth: cash in accounts + money locked in active savings
-    // (principal + accrued interest) + receivables - payables.
+    // Total accessible wealth: current balance (accounts + cash) + money locked
+    // in active savings (principal + accrued interest) + receivables - payables.
     const savingsValue = state.savings
       .filter((s) => savingsStatus(s) !== 'withdrawn')
       .reduce((sum, s) => sum + Number(s.principal || 0) + savingsInterestEarned(s), 0);
-    return totalAccountsBalance() + savingsValue + totalReceivable() - totalPayable();
+    return currentBalance() + savingsValue + totalReceivable() - totalPayable();
   }
 
   function totalReceivable() {
@@ -698,6 +731,7 @@
     totalExpense,
     filterByMonth,
     currentBalance,
+    cashBalance,
     totalReceivable,
     totalPayable,
     upcomingDueLoans,

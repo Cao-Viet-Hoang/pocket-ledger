@@ -56,7 +56,7 @@ Stored per user at `ledgers/{username}/<collection>/{id}`:
 
 - `categories` — `{ id, nameKey, type: 'income'|'expense', icon, tone }`
 - `people` — `{ id, name, phone, note, color: 1..6, createdAt }`
-- `transactions` — `{ id, type, amount, category, date, personId, note }` (**does NOT touch account balance**)
+- `transactions` — `{ id, type, amount, category, date, personId, accountId, note }` (`accountId` is optional; when set, the transaction mutates that account's balance. `null` = cash, no account effect)
 - `lending` / `borrowing` — `{ id, personId, principal, startDate, dueDate, note, payments: [{ id, date, amount, note }] }`
 - `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`
 - `savings` — `{ id, name, accountId, principal, interestRate, termMonths, startDate, maturityDate, status, withdrawals, note, createdAt, withdrawnAt?, finalAmount?, finalInterest? }`
@@ -70,10 +70,11 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 | What | How |
 |---|---|
 | `totalAccountsBalance` | `Σ account.balance` |
-| `currentBalance` | accounts exist → `totalAccountsBalance`; else `openingBalance + income − expense` |
+| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null)` (untagged transactions = free-floating cash) |
+| `currentBalance` | `totalAccountsBalance + cashBalance` (unified — accounts + untagged cash) |
 | `savingsInterestEarned` | `principal × rate × daysElapsed / 365` (simple, capped at maturity). Once withdrawn, uses stored `finalInterest`. |
 | `totalSavingsPrincipal` / `totalSavingsInterest` | excludes `status === 'withdrawn'` |
-| `netWorth` | `accounts + activeSavings(principal + accruedInterest) + receivables − payables` |
+| `netWorth` | `currentBalance + activeSavings(principal + accruedInterest) + receivables − payables` |
 | `loanRemaining` | `max(0, principal − Σ payments.amount)` |
 | `loanStatus` | `paid` (remaining≤0) > `overdue` (due<today) > `partial` (paid>0) > `unpaid` |
 | `totalReceivable` / `totalPayable` | `Σ loanRemaining` over lending / borrowing |
@@ -83,7 +84,7 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 - `withdrawSavings` returns `principal + interest` to source account, stamps `finalInterest` / `finalAmount`.
 - `deleteSavings` refunds principal if not yet withdrawn.
 - `addTransfer` / `deleteTransfer` mutate both accounts (rolls back on delete).
-- `addTransaction` / `updateTransaction` / `deleteTransaction` **do not** touch accounts (by design).
+- `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` when `accountId` is set (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one. When `accountId` is `null`, the transaction is a pure cash-journal entry — no account is touched, but it still contributes to `cashBalance`.
 
 ## Style rules (non-negotiable)
 

@@ -107,6 +107,8 @@
   "txn.amount": "Số tiền",
   "txn.note": "Ghi chú",
   "txn.person": "Người liên quan",
+  "txn.account": "Tài khoản",
+  "txn.account.none": "Không (Tiền mặt)",
   "txn.description": "Mô tả",
   "txn.actions": "Thao tác",
   "txn.range.7d": "7 ngày gần nhất",

@@ -43,13 +43,21 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 ### `transactions`
 ```json
 { "id": "t-001", "type": "income", "amount": 25000000, "category": "salary",
-  "date": "2026-04-01", "personId": null, "note": "…" }
+  "date": "2026-04-01", "personId": null, "accountId": "acc-vcb", "note": "…" }
 ```
 - `type`: `'income' | 'expense'`
 - `amount`: positive integer (sign comes from `type`)
 - `category`: must be an existing `categories[].id`
 - `personId`: nullable
-- **Invariant**: transactions do **not** mutate any account balance. See `.claude/rules/money-calculations.md` §"Why transactions don't touch accounts".
+- `accountId`: nullable. When set, the transaction mutates `accounts[accountId].balance`
+  (income `+=`, expense `−=`). When `null`, the transaction is treated as free-floating
+  cash and contributes to `cashBalance` instead — see money-calculations.md.
+- **Invariants**:
+  - `addTransaction` applies the account delta on create; `updateTransaction` rolls back
+    the previous delta and applies the new one (handling `accountId` / `amount` / `type`
+    changes and `null ↔ acc-*` transitions); `deleteTransaction` rolls back the delta.
+  - A missing `accountId` field on stored records is treated as `null` (backward-compatible
+    with pre-coupling data).
 
 ### `lending` / `borrowing`
 ```json
@@ -114,7 +122,7 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 ## Cross-entity invariants (not enforced — respect them in new code)
 
 1. **Account ↔ savings coupling.** Savings is always linked to an account. Breaking the link (e.g. deleting the account) orphans the savings — the UI tolerates it but the balance math goes slightly wrong. If you add a delete-account flow that touches savings, decide explicitly: cascade, block, or warn.
-2. **Transactions have no `accountId`.** A user who both tracks accounts and logs expense transactions will see two independent views. This is intentional — see money-calculations.md.
+2. **Account ↔ transaction coupling.** Transactions may be linked to an account via `accountId`. Tagged transactions mutate the account balance through `Store.addTransaction` / `updateTransaction` / `deleteTransaction`. Untagged (`accountId: null`) transactions are pure cash-journal entries and feed into `cashBalance`. If you add a delete-account flow, decide: cascade-delete tagged transactions, null them out (convert to cash), block the delete, or warn.
 3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app.
 4. **Categories are global per-user.** Deleting a category orphans any transaction using it (UI shows `—`). No delete-category flow exists yet; if you add one, warn or reassign.
 

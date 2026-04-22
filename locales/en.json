@@ -107,6 +107,8 @@
   "txn.amount": "Amount",
   "txn.note": "Note",
   "txn.person": "Person",
+  "txn.account": "Account",
+  "txn.account.none": "None (Cash)",
   "txn.description": "Description",
   "txn.actions": "Actions",
   "txn.range.7d": "Last 7 days",

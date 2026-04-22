@@ -11,6 +11,8 @@ Single source of truth for every amount shown in the UI. **Always consult this f
 | `totalPaid(loan)` | `Σ loan.payments[i].amount` | Works for lending and borrowing. |
 | `loanRemaining(loan)` | `max(0, loan.principal − totalPaid(loan))` | Never negative. |
 | `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types. |
+| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null)` | Free-floating cash outside tracked accounts. Untagged transactions feed this. |
+| `currentBalance()` | `totalAccountsBalance() + cashBalance()` | Spendable money (accounts + cash). Hero number on dashboard. |
 | `totalReceivable()` | `Σ loanRemaining(l)` over lending | |
 | `totalPayable()` | `Σ loanRemaining(b)` over borrowing | |
 | `personOwedToUser(id)` | `Σ loanRemaining` over lending filtered by `personId` | Used on People page. |
@@ -48,31 +50,39 @@ interest  = round(principal × rate × days / 365)
 - Once withdrawn, `savingsInterestEarned` returns the **stored** `finalInterest` (locked in at withdrawal).
 - Integer rounding happens only at the final step.
 
-## Current balance — **two modes**
+## Current balance — unified formula
 
 ```js
-currentBalance = accounts.length > 0
-  ? totalAccountsBalance()
-  : openingBalance + totalIncome() − totalExpense();
+cashBalance    = openingBalance + Σ income(accountId==null) − Σ expense(accountId==null);
+currentBalance = totalAccountsBalance() + cashBalance;
 ```
 
-- **If any accounts exist**, accounts are the authoritative cash position and transactions are ignored for balance purposes.
-- **If no accounts**, we fall back to a journal-style balance using the opening balance from settings + income/expense.
+Two disjoint buckets feed the hero:
 
-### Why transactions don't touch accounts
+- **Accounts** — money inside tracked accounts. Mutated by `addTransaction` /
+  `updateTransaction` / `deleteTransaction` whenever `accountId` is set, plus by
+  transfers and savings side-effects.
+- **Cash** — money outside any tracked account. Seeded by `openingBalance` and
+  adjusted by every transaction whose `accountId` is `null`.
 
-This is a deliberate design choice, not a bug:
+A stored transaction without the `accountId` field is treated as `null` (pure cash
+entry) so pre-coupling data keeps working without migration.
 
-- Users in the early phase of the app often just want to log income/expense without modeling their accounts.
-- Users who do set up accounts treat `balance` as the truth (they reconcile it to their real bank balance).
-- Wiring transactions to accounts would require every transaction to have an `accountId`, plus migration + UI changes. When/if that happens, update this file and make the coupling enforceable (require `accountId` on transactions, mutate the account in `Store.addTransaction`).
+### Transaction ↔ account coupling
 
-If the user asks to link transactions to accounts: treat it as a feature, not a fix. Plan it.
+| Mutation | Side-effect on accounts |
+|---|---|
+| `addTransaction(data)` | If `data.accountId`, `account.balance += (income? +amount : −amount)` |
+| `updateTransaction(id, patch)` | Rollback prior delta on old account, apply new delta on new account. Handles `accountId` swaps, `amount` changes, `type` flips, and `null ↔ acc-*` transitions. |
+| `deleteTransaction(id)` | If the record had `accountId`, undo its delta. |
+
+Helper: `txnAccountDelta(txn)` returns the signed amount a txn contributes to its
+linked account (`0` when unlinked), so the mutations stay symmetric.
 
 ## Net worth (dashboard / analytics)
 
 ```js
-netWorth = totalAccountsBalance()
+netWorth = currentBalance()                                        // accounts + cash
          + Σ (principal + accruedInterest) over non-withdrawn savings
          + totalReceivable()
          − totalPayable();
@@ -80,6 +90,7 @@ netWorth = totalAccountsBalance()
 
 - No double counting: savings principal is already **subtracted** from the source account on create.
 - Interest in `netWorth` is **accrued-to-date**, not final.
+- Cash portion of `currentBalance` is included so untagged transactions still count.
 
 ## Transfers
 
