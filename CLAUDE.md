@@ -70,7 +70,7 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 | What | How |
 |---|---|
 | `totalAccountsBalance` | `Σ account.balance` |
-| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null)` (untagged transactions = free-floating cash) |
+| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null) + cashSavingsAdjustment + cashTransferAdjustment` (untagged transactions + cash-funded savings + account↔cash transfers) |
 | `currentBalance` | `totalAccountsBalance + cashBalance` (unified — accounts + untagged cash) |
 | `savingsInterestEarned` | `principal × rate × termDays / 365` — projected interest at maturity for the full locked term (Vietnamese term-deposit convention). Once withdrawn, uses stored `finalInterest`. |
 | `totalSavingsPrincipal` / `totalSavingsInterest` | excludes `status === 'withdrawn'` |
@@ -84,7 +84,7 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 - `withdrawSavings` returns `principal + interest` to the source (account or cash), stamps `finalInterest` / `finalAmount`.
 - `deleteSavings` refunds principal (to account or cash) if not yet withdrawn.
 - `updateSavings` rebalances the source(s) when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
-- `addTransfer` / `deleteTransfer` mutate both accounts (rolls back on delete).
+- `addTransfer` / `deleteTransfer` mutate the account side(s). `fromAccountId` or `toAccountId` may be `null` to represent the free-floating cash bucket — that side is reflected in `cashBalance` instead of a direct account mutation, so total wealth stays invariant.
 - `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` when `accountId` is set (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one. When `accountId` is `null`, the transaction is a pure cash-journal entry — no account is touched, but it still contributes to `cashBalance`.
 
 ## Style rules (non-negotiable)

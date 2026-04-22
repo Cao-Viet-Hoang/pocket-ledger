@@ -128,9 +128,18 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 { "id": "tf-001", "fromAccountId": "acc-vcb", "toAccountId": "acc-cash",
   "amount": 3000000, "date": "yyyy-mm-dd", "note": "…" }
 ```
+- `fromAccountId` / `toAccountId` are nullable. A `null` side represents
+  free-floating cash (the `cashBalance` bucket). Allowed shapes:
+  - account → account (classic inter-account transfer)
+  - account → cash (`toAccountId: null`, e.g. ATM withdrawal from bank to wallet)
+  - cash → account (`fromAccountId: null`, e.g. depositing physical cash)
 - **Invariant**: `fromAccountId !== toAccountId` (enforced in `Forms.transferForm`).
-- `addTransfer` subtracts from source, adds to destination.
-- `deleteTransfer` reverses the mutation.
+  `null === null` is also rejected, so cash ↔ cash is impossible.
+- `addTransfer` subtracts from source, adds to destination. When a side is
+  `null`, that side's effect is reflected inside `cashBalance()`'s
+  `transferAdjustment` term instead of a direct account mutation — total
+  wealth is unchanged.
+- `deleteTransfer` reverses the mutation (symmetric with add).
 
 ## Cross-entity invariants (not enforced — respect them in new code)
 

@@ -57,9 +57,13 @@ interest  = round(principal × rate × termDays / 365)
 cashSavingsAdjustment = Σ savings.finalInterest  (accountId==null AND status==='withdrawn')
                       − Σ savings.principal      (accountId==null AND status!=='withdrawn');
 
+cashTransferAdjustment = Σ amount  (fromAccountId!=null AND toAccountId==null)   // account → cash
+                       − Σ amount  (fromAccountId==null AND toAccountId!=null);  // cash → account
+
 cashBalance    = openingBalance
                + Σ income(accountId==null) − Σ expense(accountId==null)
-               + cashSavingsAdjustment;
+               + cashSavingsAdjustment
+               + cashTransferAdjustment;
 
 currentBalance = totalAccountsBalance() + cashBalance;
 ```
@@ -68,16 +72,18 @@ Two disjoint buckets feed the hero:
 
 - **Accounts** — money inside tracked accounts. Mutated by `addTransaction` /
   `updateTransaction` / `deleteTransaction` whenever `accountId` is set, plus by
-  transfers and savings side-effects (when savings has an `accountId`).
+  transfers (when both sides are accounts, or on the account side of an
+  account↔cash transfer) and savings side-effects (when savings has an
+  `accountId`).
 - **Cash** — money outside any tracked account. Seeded by `openingBalance`,
-  adjusted by every transaction whose `accountId` is `null`, and further
-  adjusted by cash-funded savings: while active/matured the principal is
-  locked out of cash (`-principal`); once withdrawn, the subtraction drops and
-  the stored `finalInterest` credits back to cash (the principal returns
-  implicitly).
+  adjusted by every transaction whose `accountId` is `null`, adjusted by
+  cash-funded savings (active/matured principal locks out of cash; withdrawn
+  deposits credit their `finalInterest` back), and adjusted by transfers that
+  cross the account ↔ cash boundary (account→cash adds, cash→account subtracts).
 
-A stored transaction / savings without the `accountId` field is treated as
-`null` so pre-coupling data keeps working without migration.
+A stored transaction / savings / transfer without an `accountId` field (or
+where the transfer side is `null`) is treated as cash so pre-coupling data
+keeps working without migration.
 
 ### Transaction ↔ account coupling
 
@@ -110,14 +116,29 @@ netWorth = currentBalance()                                        // accounts +
 
 ## Transfers
 
+A transfer moves `amount` between two buckets. Each side is either a tracked
+account (`accountId`) or `null` (the free-floating cash bucket).
+
 ```js
-addTransfer:     from.balance −= amount;   to.balance += amount;
-deleteTransfer:  from.balance += amount;   to.balance −= amount;
+// When the side is an account, mutate account.balance directly.
+// When the side is null (cash), the effect lives in cashBalance's
+// transferAdjustment term — no direct mutation needed.
+addTransfer:     if (fromAccount) fromAccount.balance −= amount;
+                 if (toAccount)   toAccount.balance   += amount;
+deleteTransfer:  symmetric reverse of the above
 ```
 
+Allowed shapes: account → account, account → cash, cash → account.
+Cash ↔ cash is impossible (same-source check rejects it).
+
 Guarded by `Forms.transferForm`:
-- same-account rejected
-- insufficient balance rejected
+- same-source (including cash ↔ cash) rejected
+- insufficient balance rejected (reads `account.balance` or `cashBalance()` per side)
+- form requires at least one tracked account to open
+
+Total wealth (`currentBalance`) is invariant across a transfer regardless of
+shape — money shifts between `totalAccountsBalance` and `cashBalance`, but
+their sum is unchanged.
 
 ## Delta % (dashboard cards)
 

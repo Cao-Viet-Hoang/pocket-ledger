@@ -644,23 +644,28 @@
 
   function transferForm() {
     const accounts = Store.getAccounts();
-    if (accounts.length < 2) {
-      Toast.show(I18n.t('transfer.sameAccount'));
+    // Need at least one account — account ↔ cash is allowed; cash ↔ cash is not.
+    if (accounts.length < 1) {
+      Toast.show(I18n.t('transfer.needAccount'));
       return;
     }
 
-    function accountsHTML(accs) {
-      return accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)} (${Fmt.formatAmount(a.balance, { absolute: true })})</option>`).join('');
+    function sourceOptionsHTML(accs) {
+      const cashLabel = I18n.t('transfer.cash');
+      const cashBal = Store.cashBalance();
+      const cashOption = `<option value="">${escapeHTML(cashLabel)} (${Fmt.formatAmount(cashBal, { absolute: true })})</option>`;
+      const items = accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)} (${Fmt.formatAmount(a.balance, { absolute: true })})</option>`).join('');
+      return cashOption + items;
     }
 
     const bodyHTML = `
       <div class="form-group" style="margin-bottom: var(--space-3)">
         <label class="form-label">${I18n.t('transfer.from')}</label>
-        <select class="select" id="tfFrom">${accountsHTML(accounts)}</select>
+        <select class="select" id="tfFrom">${sourceOptionsHTML(accounts)}</select>
       </div>
       <div class="form-group" style="margin-bottom: var(--space-3)">
         <label class="form-label">${I18n.t('transfer.to')}</label>
-        <select class="select" id="tfTo">${accountsHTML(accounts)}</select>
+        <select class="select" id="tfTo">${sourceOptionsHTML(accounts)}</select>
       </div>
 
       <div class="amount-input">
@@ -689,8 +694,8 @@
           keepOpen: true,
           onClick: async () => {
             const root = document.getElementById('modalRoot');
-            const fromAccountId = root.querySelector('#tfFrom').value;
-            const toAccountId = root.querySelector('#tfTo').value;
+            const fromAccountId = root.querySelector('#tfFrom').value || null;
+            const toAccountId = root.querySelector('#tfTo').value || null;
             const amount = parseAmountInput(root.querySelector('#tfAmount').value);
             const date = root.querySelector('#tfDate').value;
             const note = root.querySelector('#tfNote').value.trim();
@@ -699,8 +704,10 @@
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
 
-            const fromAcc = Store.getAccountById(fromAccountId);
-            if (fromAcc && Number(fromAcc.balance || 0) < amount) {
+            const fromBalance = fromAccountId
+              ? Number((Store.getAccountById(fromAccountId) || {}).balance || 0)
+              : Store.cashBalance();
+            if (fromBalance < amount) {
               Toast.show(I18n.t('transfer.insufficientBalance'));
               return;
             }
@@ -718,9 +725,10 @@
       ]
     });
 
-    // Pre-select second account for "to"
+    // Default: first account → (second account, or cash if only one account exists).
     const root = document.getElementById('modalRoot');
-    if (accounts.length > 1) root.querySelector('#tfTo').value = accounts[1].id;
+    root.querySelector('#tfFrom').value = accounts[0].id;
+    root.querySelector('#tfTo').value = accounts.length > 1 ? accounts[1].id : '';
     wireAmountInput(root.querySelector('#tfAmount'));
   }
 })(window);

@@ -59,13 +59,18 @@
   }
 
   function transferRow(tf) {
-    const from = Store.getAccountById(tf.fromAccountId);
-    const to = Store.getAccountById(tf.toAccountId);
+    const cashLabel = I18n.t('transfer.cash');
+    const fromLabel = tf.fromAccountId
+      ? ((Store.getAccountById(tf.fromAccountId) || {}).name || '?')
+      : cashLabel;
+    const toLabel = tf.toAccountId
+      ? ((Store.getAccountById(tf.toAccountId) || {}).name || '?')
+      : cashLabel;
     return `
       <div class="txn-row">
         <span class="circle-icon info" data-icon="arrow-left-right"></span>
         <div>
-          <div class="txn-title">${from ? escapeHTML(from.name) : '?'} → ${to ? escapeHTML(to.name) : '?'}</div>
+          <div class="txn-title">${escapeHTML(fromLabel)} → ${escapeHTML(toLabel)}</div>
           <div class="txn-sub">
             <span>${Fmt.formatRelative(tf.date, I18n.getLang())}</span>
             ${tf.note ? `<span>•</span><span>${escapeHTML(tf.note)}</span>` : ''}

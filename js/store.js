@@ -472,11 +472,14 @@
   async function addTransfer(data) {
     const id = data.id || genId('tf');
     const rec = Object.assign({ note: '' }, data, { id });
+    // Either side may be null — that side represents free-floating cash
+    // (reflected via cashBalance's transferAdjustment, not a direct mutation).
+    if (!rec.fromAccountId) rec.fromAccountId = null;
+    if (!rec.toAccountId) rec.toAccountId = null;
     await FirebaseClient.setItem('transfers', id, rec);
     state.transfers.push(rec);
-    // Update account balances
-    const fromAcc = state.accounts.find((a) => a.id === rec.fromAccountId);
-    const toAcc = state.accounts.find((a) => a.id === rec.toAccountId);
+    const fromAcc = rec.fromAccountId ? state.accounts.find((a) => a.id === rec.fromAccountId) : null;
+    const toAcc = rec.toAccountId ? state.accounts.find((a) => a.id === rec.toAccountId) : null;
     const amount = Number(rec.amount || 0);
     if (fromAcc) {
       fromAcc.balance = Number(fromAcc.balance || 0) - amount;
@@ -494,8 +497,8 @@
     const tf = state.transfers.find((t) => t.id === id);
     if (tf) {
       const amount = Number(tf.amount || 0);
-      const fromAcc = state.accounts.find((a) => a.id === tf.fromAccountId);
-      const toAcc = state.accounts.find((a) => a.id === tf.toAccountId);
+      const fromAcc = tf.fromAccountId ? state.accounts.find((a) => a.id === tf.fromAccountId) : null;
+      const toAcc = tf.toAccountId ? state.accounts.find((a) => a.id === tf.toAccountId) : null;
       if (fromAcc) {
         fromAcc.balance = Number(fromAcc.balance || 0) + amount;
         await FirebaseClient.updateItem('accounts', fromAcc.id, { balance: fromAcc.balance });
@@ -604,12 +607,15 @@
   }
 
   // Cash not held in any tracked account: opening balance + signed sum of
-  // transactions with accountId == null, adjusted for savings funded from cash.
+  // transactions with accountId == null, adjusted for savings funded from cash
+  // and for transfers that cross the account ↔ cash boundary.
   // Active/matured cash savings subtract their principal (money locked away);
   // withdrawn cash savings add back their finalInterest (the earnings credited
   // to cash on payout — the principal returns implicitly as the subtraction
-  // term drops out). Transactions/savings tied to a tracked account are already
-  // reflected in totalAccountsBalance() and are excluded here.
+  // term drops out). Transfers with toAccountId==null moved money INTO cash;
+  // fromAccountId==null moved money OUT of cash. Transactions/savings/transfers
+  // wholly inside tracked accounts are already reflected in
+  // totalAccountsBalance() and are excluded here.
   function cashBalance() {
     const unlinked = state.transactions.filter((t) => !t.accountId);
     const opening = Number(state.settings.openingBalance || 0);
@@ -619,7 +625,13 @@
         if (savingsStatus(s) === 'withdrawn') return sum + Number(s.finalInterest || 0);
         return sum - Number(s.principal || 0);
       }, 0);
-    return opening + totalIncome(unlinked) - totalExpense(unlinked) + savingsAdjustment;
+    const transferAdjustment = state.transfers.reduce((sum, tf) => {
+      const amount = Number(tf.amount || 0);
+      if (tf.fromAccountId && !tf.toAccountId) return sum + amount; // account → cash
+      if (!tf.fromAccountId && tf.toAccountId) return sum - amount; // cash → account
+      return sum;
+    }, 0);
+    return opening + totalIncome(unlinked) - totalExpense(unlinked) + savingsAdjustment + transferAdjustment;
   }
 
   function currentBalance() {

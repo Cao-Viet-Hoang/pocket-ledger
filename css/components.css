@@ -396,13 +396,15 @@
 .input-with-icon {
   position: relative;
 }
-.input-with-icon svg {
+.input-with-icon [data-icon] {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--color-text-muted);
   pointer-events: none;
+}
+.input-with-icon [data-icon] svg {
   width: 16px;
   height: 16px;
 }
