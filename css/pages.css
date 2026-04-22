@@ -99,8 +99,10 @@
   font-size: var(--fs-xl);
 }
 @media (max-width: 640px) {
-  .hero-balance { padding: var(--space-5); }
-  .hero-amount { font-size: 34px; }
+  .hero-balance { padding: var(--space-6) var(--space-5); border-radius: var(--radius-lg); }
+  .hero-amount { font-size: 30px; margin-top: var(--space-4); }
+  .hero-meta { gap: var(--space-5); margin-top: var(--space-5); }
+  .hero-meta-value { font-size: var(--fs-lg); }
 }
 
 /* Recent transaction list */
@@ -109,7 +111,7 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--color-divider);
 }
 .txn-row:last-child { border-bottom: 0; }
@@ -285,6 +287,9 @@
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-divider);
 }
+.person-stats > div:last-child {
+  text-align: right;
+}
 .person-stat-label {
   color: var(--color-text-muted);
   font-size: var(--fs-xs);
@@ -422,7 +427,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--color-divider);
 }
 .due-item:last-child { border-bottom: 0; }
@@ -496,4 +501,141 @@
   background: var(--color-surface);
   color: var(--color-expense);
   box-shadow: var(--shadow-xs);
+}
+
+/* ===== Responsive: pages ===== */
+@media (max-width: 900px) {
+  /* Section header stacks on tablet/mobile */
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .section-header .actions {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+}
+
+@media (max-width: 720px) {
+  /* Page vertical rhythm — keep comfortable separation between sections */
+  .page { gap: var(--space-6); }
+
+  /* Card + chart card padding */
+  .card { padding: var(--space-5); }
+  .chart-card { padding: var(--space-5); }
+  .chart-svg { height: 220px; }
+  .chart-svg.donut { height: 200px; }
+
+  .card-header {
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+
+  /* Toolbar on transactions page */
+  .toolbar {
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .toolbar .search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .toolbar .segmented {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .toolbar .segmented button { flex: 1; }
+  .toolbar .select {
+    flex: 1 1 calc(50% - var(--space-2));
+    max-width: none !important;
+    min-width: 0;
+  }
+  .toolbar #addTxnBtn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  /* Chip group horizontal scroll instead of wrapping awkwardly */
+  .chip-group {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .chip-group::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; }
+
+  /* Loan card — compact but roomy inside */
+  .loan-card { padding: var(--space-5); gap: var(--space-4); }
+  .loan-amount-big { font-size: var(--fs-xl); }
+  /* Keep 3 short columns (paid/remaining/due) — avoids orphaned third item */
+  .loan-details {
+    grid-template-columns: repeat(3, 1fr);
+    column-gap: var(--space-2);
+    row-gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+  .loan-details dd { font-size: var(--fs-sm); }
+
+  /* Person card */
+  .person-card { padding: var(--space-5); gap: var(--space-4); }
+  .person-name { font-size: var(--fs-md); }
+
+  /* Detail grid in loan detail modal */
+  .detail-grid { grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+  .detail-grid .detail-item { padding: var(--space-3) var(--space-4); }
+
+  /* Reports: segmented range scrolls horizontally */
+  #reportRange .segmented {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  #reportRange .segmented::-webkit-scrollbar { display: none; }
+  #reportRange .segmented button {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Recent transactions row — keep rows readable with a bit of air */
+  .txn-row { padding: var(--space-4) 0; gap: var(--space-3); }
+  .txn-title { font-size: var(--fs-sm); }
+  .txn-sub { font-size: var(--fs-xs); margin-top: 4px; }
+  .txn-amount { font-size: var(--fs-sm); }
+
+  /* Due list */
+  .due-item { padding: var(--space-4) 0; gap: var(--space-3); }
+
+  /* Amount input in modals */
+  .amount-input { padding: var(--space-4) 0 var(--space-3); }
+  .amount-input input { font-size: 32px; }
+
+  /* People page search input: full width */
+  #peopleSearch { min-width: 0 !important; width: 100%; }
+  .section-header .input-with-icon { flex: 1; }
+}
+
+@media (max-width: 480px) {
+  /* Keep 3 columns still but ever so slightly tighter text */
+  .loan-details { grid-template-columns: repeat(3, 1fr); column-gap: var(--space-1); }
+  .loan-details dt { font-size: 10px; }
+  .loan-footer { flex-direction: column; align-items: stretch; gap: var(--space-3); }
+
+  /* Detail grid to 1 col */
+  .detail-grid { grid-template-columns: 1fr; gap: var(--space-2); }
+
+  /* Hero meta: 2 per row, keep comfortable gap */
+  .hero-meta { gap: var(--space-4); margin-top: var(--space-4); }
+  .hero-meta-item { flex: 1 1 calc(50% - var(--space-4)); }
+  .hero-amount { font-size: 28px; }
+
+  .amount-input input { font-size: 28px; }
+
+  /* Stat card still breathes */
+  .stat-card { padding: var(--space-4); gap: var(--space-3); }
 }

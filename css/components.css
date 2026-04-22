@@ -121,10 +121,10 @@
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  padding: var(--space-5);
+  padding: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
   position: relative;
   overflow: hidden;
   transition: box-shadow var(--transition), transform var(--transition);
@@ -255,7 +255,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   border-bottom: 1px solid var(--color-divider);
 }
 .list-item:last-child { border-bottom: 0; }
@@ -552,14 +552,20 @@
   from { opacity: 0; transform: translate(-50%, -48%) scale(0.98); }
   to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ===== Toast ===== */
 .toast-root {
   position: fixed;
   bottom: var(--space-6);
   right: var(--space-6);
+  left: auto;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: var(--space-2);
   z-index: 200;
   pointer-events: none;
@@ -602,4 +608,137 @@
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
+}
+
+/* ===== Responsive tweaks ===== */
+@media (max-width: 720px) {
+  /* Prevent iOS zoom on focus by ensuring 16px font size */
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px;
+  }
+
+  /* Modal becomes a bottom sheet */
+  .modal-dialog {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    animation: slide-up 260ms var(--ease-out) both;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal-dialog.lg { max-width: 100%; }
+  .modal-header { padding: var(--space-5) var(--space-5) var(--space-4); }
+  .modal-header h2 { font-size: var(--fs-lg); }
+  .modal-body { padding: var(--space-5) var(--space-5) var(--space-6); }
+  .modal-footer {
+    padding: var(--space-4) var(--space-5);
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .modal-footer .btn { flex: 1 1 auto; min-width: 0; }
+  /* Spacing between stacked form fields inside modal body */
+  .modal-body .form-group + .form-group,
+  .modal-body .form-group + .grid,
+  .modal-body .grid + .form-group,
+  .modal-body .grid + .grid {
+    margin-top: var(--space-3);
+  }
+
+  /* Toast: full width bottom, above tabbar */
+  .toast-root {
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: calc(var(--tabbar-height) + var(--space-4) + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
+  }
+  .toast { text-align: center; }
+
+  /* Stat card — tighter padding on phones, keep label/value breathing */
+  .stat-card { padding: var(--space-5); gap: var(--space-4); }
+  .stat-value { font-size: var(--fs-2xl); }
+  .stat-value.small { font-size: var(--fs-xl); }
+  .stat-meta { margin-top: var(--space-1); }
+
+  /* Tables — compact rows, hide secondary columns */
+  .table thead th,
+  .table tbody td { padding: 10px var(--space-3); }
+  .table { font-size: var(--fs-sm); }
+}
+
+@media (max-width: 640px) {
+  /* Convert .table into stacked cards for readability */
+  .table { border-collapse: separate; border-spacing: 0; display: block; }
+  .table thead { display: none; }
+  .table tbody { display: block; }
+  .table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: var(--space-3);
+    row-gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    margin-bottom: var(--space-3);
+  }
+  .table tbody tr:hover { background: var(--color-surface); }
+  .table tbody td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .table tbody td:nth-child(1) { grid-column: 1 / 2; grid-row: 1; min-width: 0; }
+  .table tbody td:nth-child(5) {
+    grid-column: 2 / 3;
+    grid-row: 1;
+    text-align: right;
+    white-space: nowrap;
+    align-self: center;
+  }
+  .table tbody td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .table tbody td:nth-child(3) {
+    grid-column: 1 / 2;
+    grid-row: 3;
+    min-width: 0;
+  }
+  .table tbody td:nth-child(4) {
+    grid-column: 2 / 3;
+    grid-row: 3;
+    text-align: right;
+    font-size: var(--fs-xs);
+  }
+  .table tbody td:nth-child(6) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    display: flex;
+    gap: var(--space-2);
+    justify-content: flex-end;
+    border-top: 1px solid var(--color-divider);
+    padding-top: var(--space-3);
+    margin-top: var(--space-1);
+  }
+  .table tbody td:nth-child(6) .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  /* Empty-state row (single td with colspan) spans full width */
+  .table tbody tr > td:only-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .table-scroll { overflow: visible; }
+
+  /* Buttons — ensure touch target */
+  .btn { padding: 11px 16px; }
+  .btn-sm { padding: 8px 12px; }
 }

@@ -2,6 +2,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
+  overflow-x: hidden;
 }
 
 /* ===== Sidebar ===== */
@@ -64,7 +65,7 @@
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   flex: 1;
 }
 
@@ -250,7 +251,7 @@
 }
 
 .content {
-  padding: var(--space-2) var(--space-7) var(--space-9);
+  padding: var(--space-5) var(--space-7) var(--space-9);
   width: 100%;
   max-width: var(--content-max-width);
   margin: 0 auto;
@@ -264,11 +265,13 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--tabbar-height);
+  height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   z-index: 50;
-  padding: 0 var(--space-2);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
   justify-content: space-around;
   align-items: center;
 }
@@ -331,7 +334,7 @@
     padding: 3px;
   }
   .content {
-    padding: var(--space-2) var(--space-5) var(--space-8);
+    padding: var(--space-5) var(--space-5) var(--space-8);
   }
   .topbar {
     padding: 0 var(--space-5);
@@ -347,7 +350,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(280px, 80vw);
+    width: min(280px, 82vw);
     padding: var(--space-6) var(--space-4);
     align-items: stretch;
     transform: translateX(-100%);
@@ -366,10 +369,6 @@
     padding: var(--space-2) var(--space-3);
     justify-content: flex-start;
   }
-  .sidebar .nav-item {
-    justify-content: flex-start;
-    padding: var(--space-3) var(--space-4);
-  }
   .sidebar .language-switcher {
     flex-direction: row;
   }
@@ -381,13 +380,45 @@
   }
   .topbar {
     padding: 0 var(--space-4);
-    height: 64px;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
+    height: calc(60px + env(safe-area-inset-top, 0px));
+    gap: var(--space-3);
   }
-  .topbar-title h1 { font-size: var(--fs-xl); }
+  .topbar-title h1 { font-size: var(--fs-lg); }
+  .topbar-subtitle { display: none; }
   .content {
-    padding: var(--space-2) var(--space-4) calc(var(--tabbar-height) + var(--space-7));
+    padding: var(--space-5) var(--space-4) calc(var(--tabbar-height) + var(--space-8) + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
   }
+  .sidebar .nav-item {
+    justify-content: flex-start;
+    padding: 12px var(--space-4);
+    min-height: 44px;
+  }
+  .sidebar-footer {
+    gap: var(--space-4);
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  }
+  .topbar-actions { gap: var(--space-1); }
   .topbar-actions .btn:not(.btn-primary) {
     display: none;
   }
+  /* FAB in mobile tabbar already handles quick add — hide topbar button */
+  .topbar-actions .btn-primary {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar { padding: 0 var(--space-3); }
+  .content {
+    padding: var(--space-3) var(--space-3) calc(var(--tabbar-height) + var(--space-6) + env(safe-area-inset-bottom, 0px));
+  }
+  .tab-item { font-size: 9px; padding: 6px 4px; }
+  .tab-item svg { width: 20px; height: 20px; }
+  .tab-item.tab-add { flex: 0 0 52px; height: 52px; transform: translateY(-18px); }
+  .tab-item.tab-add svg { width: 24px; height: 24px; }
 }
