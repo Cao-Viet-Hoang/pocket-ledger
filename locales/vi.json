@@ -86,6 +86,8 @@
 
   "dash.currentBalance": "Số dư hiện tại",
   "dash.currentBalance.hint": "Tổng tiền bạn đang thực có",
+  "dash.netWorth": "Tổng tài sản",
+  "dash.netWorth.hint": "Tiền mặt + tiết kiệm + phải thu − phải trả",
   "dash.incomeThisMonth": "Thu trong tháng",
   "dash.expenseThisMonth": "Chi trong tháng",
   "dash.net": "Chênh lệch trong tháng",

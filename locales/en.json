@@ -86,6 +86,8 @@
 
   "dash.currentBalance": "Current balance",
   "dash.currentBalance.hint": "Total cash you have right now",
+  "dash.netWorth": "Net worth",
+  "dash.netWorth.hint": "Cash + savings + receivables − payables",
   "dash.incomeThisMonth": "Income this month",
   "dash.expenseThisMonth": "Expenses this month",
   "dash.net": "Net this month",

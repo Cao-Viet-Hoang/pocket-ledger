@@ -94,6 +94,7 @@
     const receivable = Store.totalReceivable();
     const payable = Store.totalPayable();
     const balance = Store.currentBalance();
+    const netWorth = Store.netWorth();
 
     const recentTxns = Store.getTransactions()
       .slice()
@@ -125,6 +126,10 @@
             <div class="hero-meta-item">
               <span class="hero-meta-label" data-i18n="dash.net">Net this month</span>
               <span class="hero-meta-value">${net >= 0 ? '+' : '-'}${Fmt.formatAmount(Math.abs(net), { absolute: true })}</span>
+            </div>
+            <div class="hero-meta-item">
+              <span class="hero-meta-label" data-i18n="dash.netWorth">Net worth</span>
+              <span class="hero-meta-value">${Fmt.formatAmount(netWorth, { absolute: true })}</span>
             </div>
           </div>
         </section>
