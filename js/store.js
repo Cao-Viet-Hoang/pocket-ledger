@@ -599,9 +599,21 @@
       .sort((a, b) => b.value - a.value);
   }
 
-  function dailySeries(transactions, days = 30) {
+  function dailySeries(transactions, daysOrOptions = 30) {
+    let days, end;
+    if (typeof daysOrOptions === 'number') {
+      days = daysOrOptions;
+      end = Fmt.today();
+    } else {
+      end = daysOrOptions.end ? Fmt.parseDate(daysOrOptions.end) : Fmt.today();
+      if (daysOrOptions.start) {
+        const start = Fmt.parseDate(daysOrOptions.start);
+        days = Math.max(1, Fmt.daysBetween(start, end) + 1);
+      } else {
+        days = daysOrOptions.days || 30;
+      }
+    }
     const arr = [];
-    const end = Fmt.today();
     const txns = transactions || state.transactions;
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(end);

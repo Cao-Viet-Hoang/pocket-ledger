@@ -376,12 +376,58 @@
     });
   }
 
+  // ---- Date range picker dialog -----------------------------------------
+
+  function dateRangeDialog({ title, from, to, onConfirm, onCancel }) {
+    const bodyHTML = `
+      <div class="grid grid-2" style="gap: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.range.from')}</label>
+          <input type="date" class="input" id="rangeFromInput" value="${from || ''}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.range.to')}</label>
+          <input type="date" class="input" id="rangeToInput" value="${to || ''}"/>
+        </div>
+      </div>
+    `;
+    Modal.open({
+      title: title || I18n.t('txn.range.custom'),
+      bodyHTML,
+      actions: [
+        {
+          label: I18n.t('action.cancel'),
+          variant: 'secondary',
+          onClick: () => { if (typeof onCancel === 'function') onCancel(); }
+        },
+        {
+          label: I18n.t('action.confirm'),
+          variant: 'primary',
+          keepOpen: true,
+          onClick: () => {
+            const root = document.getElementById('modalRoot');
+            const fromVal = root.querySelector('#rangeFromInput').value;
+            const toVal = root.querySelector('#rangeToInput').value;
+            if (!fromVal || !toVal) { Toast.show(I18n.t('form.dateRequired')); return; }
+            if (Fmt.parseDate(fromVal) > Fmt.parseDate(toVal)) {
+              Toast.show(I18n.t('txn.range.invalid'));
+              return;
+            }
+            Modal.close();
+            if (typeof onConfirm === 'function') onConfirm({ from: fromVal, to: toVal });
+          }
+        }
+      ]
+    });
+  }
+
   global.Forms = {
     transactionForm,
     personForm,
     loanForm,
     paymentForm,
     confirm,
+    dateRangeDialog,
     accountForm,
     savingsForm,
     transferForm

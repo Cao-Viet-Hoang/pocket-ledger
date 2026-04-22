@@ -1,17 +1,31 @@
 /**
  * Transactions page.
  * - Search, type filter (all/income/expense), category filter
- * - Date range, sort
+ * - Date range (presets + custom from/to), sort
  * - Table of transactions with edit/delete actions
  */
 (function (global) {
   'use strict';
 
+  function isoDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function defaultFrom() {
+    const d = Fmt.today();
+    return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  }
+
   const filterState = {
     query: '',
     type: 'all',         // all | income | expense
     category: 'all',
-    range: '30d',        // 7d | 30d | thisMonth | lastMonth | all
+    range: '30d',        // 7d | 30d | thisMonth | lastMonth | all | custom
+    customFrom: defaultFrom(),
+    customTo: isoDate(Fmt.today()),
     sort: 'dateDesc'     // dateDesc | dateAsc | amountDesc | amountAsc
   };
 
@@ -32,6 +46,13 @@
     if (range === 'lastMonth') {
       const prev = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       return d.getFullYear() === prev.getFullYear() && d.getMonth() === prev.getMonth();
+    }
+    if (range === 'custom') {
+      if (!filterState.customFrom || !filterState.customTo) return true;
+      const from = Fmt.parseDate(filterState.customFrom);
+      const to = Fmt.parseDate(filterState.customTo);
+      if (from > to) return false;
+      return d >= from && d <= to;
     }
     return true;
   }
@@ -176,7 +197,12 @@
               <option value="thisMonth"   ${filterState.range === 'thisMonth' ? 'selected' : ''}>${I18n.t('txn.range.thisMonth')}</option>
               <option value="lastMonth"   ${filterState.range === 'lastMonth' ? 'selected' : ''}>${I18n.t('txn.range.lastMonth')}</option>
               <option value="all"         ${filterState.range === 'all' ? 'selected' : ''}>${I18n.t('txn.range.all')}</option>
+              <option value="custom"      ${filterState.range === 'custom' ? 'selected' : ''}>${I18n.t('txn.range.custom')}</option>
             </select>
+            <button type="button" class="chip is-active" id="txnRangeChip" ${filterState.range === 'custom' ? '' : 'hidden'} title="${I18n.t('txn.range.custom')}">
+              <span data-icon="calendar"></span>
+              <span>${Fmt.formatDateShort(filterState.customFrom, I18n.getLang())} – ${Fmt.formatDateShort(filterState.customTo, I18n.getLang())}</span>
+            </button>
             <select id="txnSort" class="select" style="max-width:200px">
               <option value="dateDesc"   ${filterState.sort === 'dateDesc' ? 'selected' : ''}>${I18n.t('txn.sort.dateDesc')}</option>
               <option value="dateAsc"    ${filterState.sort === 'dateAsc' ? 'selected' : ''}>${I18n.t('txn.sort.dateAsc')}</option>
@@ -226,10 +252,47 @@
       filterState.category = e.target.value;
       updateRows(container);
     });
-    container.querySelector('#txnRange').addEventListener('change', (e) => {
-      filterState.range = e.target.value;
+    const rangeSelect = container.querySelector('#txnRange');
+    rangeSelect.addEventListener('change', (e) => {
+      const next = e.target.value;
+      if (next === 'custom') {
+        const previous = filterState.range;
+        e.target.value = previous;
+        Forms.dateRangeDialog({
+          from: filterState.customFrom,
+          to: filterState.customTo,
+          onConfirm: ({ from, to }) => {
+            filterState.range = 'custom';
+            filterState.customFrom = from;
+            filterState.customTo = to;
+            render(container);
+            Icons.render(container);
+            I18n.applyTranslations(container);
+          }
+        });
+        return;
+      }
+      filterState.range = next;
+      const chip = container.querySelector('#txnRangeChip');
+      if (chip) chip.hidden = true;
       updateRows(container);
     });
+    const rangeChip = container.querySelector('#txnRangeChip');
+    if (rangeChip) {
+      rangeChip.addEventListener('click', () => {
+        Forms.dateRangeDialog({
+          from: filterState.customFrom,
+          to: filterState.customTo,
+          onConfirm: ({ from, to }) => {
+            filterState.customFrom = from;
+            filterState.customTo = to;
+            render(container);
+            Icons.render(container);
+            I18n.applyTranslations(container);
+          }
+        });
+      });
+    }
     container.querySelector('#txnSort').addEventListener('change', (e) => {
       filterState.sort = e.target.value;
       updateRows(container);

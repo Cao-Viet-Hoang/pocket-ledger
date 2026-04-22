@@ -9,7 +9,29 @@
 (function (global) {
   'use strict';
 
-  const filterState = { range: '30d' };
+  function isoDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function defaultFrom() {
+    const d = Fmt.today();
+    return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  }
+
+  const filterState = {
+    range: '30d',
+    customFrom: defaultFrom(),
+    customTo: isoDate(Fmt.today())
+  };
+
+  function customBounds() {
+    const from = Fmt.parseDate(filterState.customFrom);
+    const to = Fmt.parseDate(filterState.customTo);
+    return { from, to, valid: from <= to };
+  }
 
   function filteredTransactions() {
     const today = Fmt.today();
@@ -28,8 +50,24 @@
         return d.getFullYear() === prev.getFullYear() && d.getMonth() === prev.getMonth();
       });
     }
+    if (filterState.range === 'custom') {
+      const { from, to, valid } = customBounds();
+      if (!valid) return [];
+      return all.filter((t) => {
+        const d = Fmt.parseDate(t.date);
+        return d >= from && d <= to;
+      });
+    }
     const days = filterState.range === '7d' ? 7 : 30;
     return all.filter((t) => Fmt.daysBetween(Fmt.parseDate(t.date), today) <= days);
+  }
+
+  function rangeLabel() {
+    if (filterState.range === 'custom') {
+      const lang = I18n.getLang();
+      return `${Fmt.formatDateShort(filterState.customFrom, lang)} – ${Fmt.formatDateShort(filterState.customTo, lang)}`;
+    }
+    return I18n.t('txn.range.' + filterState.range);
   }
 
   function renderRangeSelect() {
@@ -40,6 +78,7 @@
         <button data-range="thisMonth" class="${filterState.range === 'thisMonth' ? 'is-active' : ''}">${I18n.t('txn.range.thisMonth')}</button>
         <button data-range="lastMonth" class="${filterState.range === 'lastMonth' ? 'is-active' : ''}">${I18n.t('txn.range.lastMonth')}</button>
         <button data-range="all"       class="${filterState.range === 'all' ? 'is-active' : ''}">${I18n.t('txn.range.all')}</button>
+        <button data-range="custom"    class="${filterState.range === 'custom' ? 'is-active' : ''}">${I18n.t('txn.range.custom')}</button>
       </div>
     `;
   }
@@ -50,8 +89,19 @@
     const expense = Store.totalExpense(txns);
     const net = income - expense;
 
-    const days = filterState.range === '7d' ? 7 : filterState.range === '30d' ? 30 : 30;
-    const series = Store.dailySeries(txns, Math.min(days, 30));
+    let series;
+    if (filterState.range === 'custom') {
+      const { from, to, valid } = customBounds();
+      if (valid) {
+        const span = Math.min(Fmt.daysBetween(from, to) + 1, 30);
+        series = Store.dailySeries(txns, { end: filterState.customTo, days: span });
+      } else {
+        series = [];
+      }
+    } else {
+      const days = filterState.range === '7d' ? 7 : 30;
+      series = Store.dailySeries(txns, Math.min(days, 30));
+    }
 
     // Labels: show a label every few days
     const step = series.length > 14 ? 5 : (series.length > 7 ? 3 : 1);
@@ -156,7 +206,7 @@
             <div class="card-header">
               <div>
                 <div class="card-title">${I18n.t('reports.incomeVsExpense')}</div>
-                <div class="card-subtitle">${I18n.t('txn.range.' + (filterState.range === 'all' ? 'all' : filterState.range))}</div>
+                <div class="card-subtitle">${rangeLabel()}</div>
               </div>
               <div class="flex items-center gap-3" style="font-size: var(--fs-sm)">
                 <span class="flex items-center gap-2"><span class="dot" style="background:#10b981"></span>${I18n.t('txn.income')}</span>
@@ -269,7 +319,23 @@
 
     container.querySelectorAll('#reportRange [data-range]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        filterState.range = btn.dataset.range;
+        const next = btn.dataset.range;
+        if (next === 'custom') {
+          Forms.dateRangeDialog({
+            from: filterState.customFrom,
+            to: filterState.customTo,
+            onConfirm: ({ from, to }) => {
+              filterState.range = 'custom';
+              filterState.customFrom = from;
+              filterState.customTo = to;
+              render(container);
+              Icons.render(container);
+              I18n.applyTranslations(container);
+            }
+          });
+          return;
+        }
+        filterState.range = next;
         render(container);
         Icons.render(container);
         I18n.applyTranslations(container);
