@@ -43,6 +43,8 @@ locales/            en.json + vi.json
 
 ## Runtime architecture
 
+- `Store` keeps auto-connect credentials separate from the last successful setup values, so `disconnect()` stops auto-login but still prefills the setup modal with the previous username/config.
+
 - **Global namespaces** (set on `window`): `Fmt`, `Icons`, `I18n`, `Store`, `FirebaseClient`, `Modal`, `Toast`, `Forms`, `Charts`, `LoanView`, `Pages`, `Router`, `Setup`.
 - **Script order in `index.html` matters** — don't reorder without checking dependencies. Typical order: `icons → formatters → i18n → firebase-client → store → modal → forms → charts → loan-view → pages/* → setup → router → app`.
 - **Reactive flow**: mutation → `Store.*` updates Firestore + local cache → `emit()` → `Store.onChange` listeners re-render (usually `Router.renderCurrent()`).

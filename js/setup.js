@@ -127,11 +127,22 @@
     btn.textContent = connecting ? I18n.t('setup.connecting') : I18n.t('setup.connect');
   }
 
-  function open({ onDone } = {}) {
-    const stored = Store.getStoredCredentials();
-    const initial = stored
-      ? Object.assign({ username: stored.username }, stored.config || {})
+  function buildInitialValues() {
+    const currentConfig = Store.getConfig();
+    const currentUsername = Store.getUsername();
+    const current = currentConfig && currentUsername
+      ? { config: currentConfig, username: currentUsername }
+      : null;
+    const saved = Store.getStoredCredentials();
+    const lastUsed = Store.getLastUsedCredentials();
+    const source = current || saved || lastUsed;
+    return source
+      ? Object.assign({ username: source.username }, source.config || {})
       : {};
+  }
+
+  function open({ onDone } = {}) {
+    const initial = buildInitialValues();
 
     Modal.open({
       title: I18n.t('setup.title'),

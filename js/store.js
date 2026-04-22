@@ -14,6 +14,9 @@
 
   const LS_CONFIG = 'pl.fb.config';
   const LS_USER = 'pl.fb.user';
+  // Preserved across disconnect so the setup modal can prefill the last values.
+  const LS_LAST_CONFIG = 'pl.fb.lastConfig';
+  const LS_LAST_USER = 'pl.fb.lastUser';
 
   const DEFAULT_SETTINGS = {
     currency: { code: 'VND', symbol: '₫', position: 'suffix', decimals: 0 },
@@ -45,10 +48,10 @@
 
   // ---- Credentials persistence ------------------------------------------
 
-  function getStoredCredentials() {
+  function readCredentials(configKey, userKey) {
     try {
-      const raw = localStorage.getItem(LS_CONFIG);
-      const user = localStorage.getItem(LS_USER);
+      const raw = localStorage.getItem(configKey);
+      const user = localStorage.getItem(userKey);
       if (!raw || !user) return null;
       const config = JSON.parse(raw);
       if (!config || typeof config !== 'object') return null;
@@ -58,18 +61,38 @@
     }
   }
 
-  function saveStoredCredentials(config, username) {
+  function writeCredentials(configKey, userKey, config, username) {
     try {
-      localStorage.setItem(LS_CONFIG, JSON.stringify(config));
-      localStorage.setItem(LS_USER, username);
+      localStorage.setItem(configKey, JSON.stringify(config));
+      localStorage.setItem(userKey, username);
     } catch (_) {}
   }
 
-  function clearStoredCredentials() {
+  function clearCredentials(configKey, userKey) {
     try {
-      localStorage.removeItem(LS_CONFIG);
-      localStorage.removeItem(LS_USER);
+      localStorage.removeItem(configKey);
+      localStorage.removeItem(userKey);
     } catch (_) {}
+  }
+
+  function getStoredCredentials() {
+    return readCredentials(LS_CONFIG, LS_USER);
+  }
+
+  function getLastUsedCredentials() {
+    return readCredentials(LS_LAST_CONFIG, LS_LAST_USER);
+  }
+
+  function saveStoredCredentials(config, username) {
+    writeCredentials(LS_CONFIG, LS_USER, config, username);
+  }
+
+  function saveLastUsedCredentials(config, username) {
+    writeCredentials(LS_LAST_CONFIG, LS_LAST_USER, config, username);
+  }
+
+  function clearStoredCredentials() {
+    clearCredentials(LS_CONFIG, LS_USER);
   }
 
   // ---- Bootstrap --------------------------------------------------------
@@ -172,6 +195,7 @@
     await fetchAll();
     state.configured = true;
     saveStoredCredentials(config, state.username);
+    saveLastUsedCredentials(config, state.username);
     emit();
   }
 
@@ -640,6 +664,7 @@
     disconnect,
     onChange,
     getStoredCredentials,
+    getLastUsedCredentials,
     isConfigured() { return state.configured; },
     isLoaded() { return state.loaded; },
     getUsername() { return state.username; },
