@@ -14,9 +14,9 @@ Pocket Ledger has **one** source of truth for money math: `js/store.js`. Read th
 | Monthly income | `totalIncome(txns)` | `Σ t.amount` where `type='income'` |
 | Monthly expense | `totalExpense(txns)` | `Σ t.amount` where `type='expense'` |
 | Current balance | `currentBalance()` | If any accounts: `Σ account.balance`. Else: `opening + income − expense`. |
-| Net worth | `netWorth()` | `accounts + Σ(principal + accruedInterest over active savings) + receivables − payables` |
+| Net worth | `netWorth()` | `currentBalance + Σ(principal + projectedInterest over active/matured savings) + receivables − payables` |
 | Account total | `totalAccountsBalance()` | `Σ account.balance` |
-| Savings interest | `savingsInterestEarned(sav)` | Simple: `principal × (rate/100) × days / 365`. `days` = clamp to `[0, maturity−start]`. Once withdrawn, uses stored `finalInterest`. |
+| Savings interest | `savingsInterestEarned(sav)` | Simple, projected at maturity (Vietnamese term-deposit convention): `principal × (rate/100) × termDays / 365`. `termDays = daysBetween(startDate, maturityDate)`. Once withdrawn, uses stored `finalInterest`. |
 | Savings status | `savingsStatus(sav)` | `withdrawn` (stored flag) > `matured` (today≥maturity) > `active` |
 | Total principal | `totalSavingsPrincipal()` | `Σ principal` over non-withdrawn savings |
 | Total interest | `totalSavingsInterest()` | `Σ savingsInterestEarned` over non-withdrawn savings |
@@ -31,11 +31,11 @@ Pocket Ledger has **one** source of truth for money math: `js/store.js`. Read th
 
 1. **Savings principal moves with the savings record**, not with transactions:
    - `addSavings` → account.balance −= principal
-   - `withdrawSavings` → account.balance += principal + accruedInterest
+   - `withdrawSavings` → account.balance += principal + projectedInterest
    - `deleteSavings (not withdrawn)` → account.balance += principal
 2. **Transfers keep total account balance constant.** Delete reverses.
-3. **Transactions do not touch account balances** (intentional; see note below).
-4. **Interest stops accruing at maturity** — never past it.
+3. **Transactions mutate the linked account's balance** when `accountId` is set (income `+=`, expense `−=`); untagged transactions feed `cashBalance` instead. See money-calculations.md.
+4. **Savings interest is a fixed projection for the full locked term** — not daily-accrued. A deposit's interest only changes when the user edits principal / rate / dates.
 5. **Loan remaining never goes negative** — `max(0, …)`.
 6. **Once withdrawn, savings interest is frozen** — use `finalInterest`, not a recomputation.
 

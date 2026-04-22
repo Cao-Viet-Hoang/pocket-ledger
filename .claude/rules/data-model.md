@@ -87,7 +87,7 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 }
 ```
 - `type`: `'cash' | 'bank' | 'ewallet'`
-- `balance` is the **current** balance and is mutated directly by savings / transfers (not by transactions).
+- `balance` is the **current** balance and is mutated directly by transactions (when `accountId` is set), savings (create / withdraw / delete / edit), and transfers.
 - **Invariant**: `balance` can go negative in the local cache if external mutations drift; the UI prevents most negative paths (transfer checks sufficient balance).
 
 ### `savings`
@@ -103,12 +103,25 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 }
 ```
 - `interestRate` is **%/year** (5.5 means 5.5%).
+- `accountId` is nullable. When set, savings side-effects mutate that account's
+  `balance`. When `null`, the savings is funded from free-floating cash and is
+  reflected in `cashBalance` instead — see money-calculations.md.
 - `status` stored value is only load-bearing for `'withdrawn'`. Otherwise status is **dynamically computed** from `maturityDate` vs. today — see `store.savingsStatus`.
 - `withdrawnAt`, `finalAmount`, `finalInterest` are set by `Store.withdrawSavings` and must not be edited elsewhere.
 - **Invariants**:
-  - Creating savings deducts `principal` from `accounts[accountId].balance`.
-  - Withdrawing returns `principal + accruedInterest` to the source account.
-  - Deleting an active/matured savings refunds `principal` to the source account. Deleting a withdrawn one is a pure delete.
+  - Creating savings with `accountId` deducts `principal` from that account.
+    Creating with `accountId=null` leaves accounts untouched and is counted as
+    a `-principal` term inside `cashBalance`.
+  - Withdrawing with `accountId` returns `principal + projectedInterest` to the
+    account (projected interest at maturity — see money-calculations.md).
+    Withdrawing a cash savings (`accountId=null`) unlocks the principal back to
+    cash and credits `finalInterest` to `cashBalance`.
+  - Deleting an active/matured savings refunds `principal` (to the account if
+    set, otherwise to cash by removing the record from the `cashBalance` sum).
+    Deleting a withdrawn one is a pure delete.
+  - Editing `principal` or `accountId` on an active/matured savings rebalances
+    the old and new source(s) via `Store.updateSavings` (refund old, deduct
+    new). Withdrawn savings are frozen and skip the rebalance.
 
 ### `transfers`
 ```json

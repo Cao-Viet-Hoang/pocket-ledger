@@ -279,7 +279,7 @@
                     <div class="txn-sub">
                       <span class="badge ${badgeCls}">${I18n.t(statusKey)}</span>
                       <span>•</span>
-                      <span>${Number(sav.interestRate).toFixed(1)}%</span>
+                      <span>${Number(Number(sav.interestRate || 0).toFixed(2))}%</span>
                     </div>
                   </div>
                   <div class="txn-amount text-income">${Fmt.formatAmount(total, { absolute: true })}</div>

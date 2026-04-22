@@ -388,11 +388,12 @@
   async function addSavings(data) {
     const id = data.id || genId('sav');
     const rec = Object.assign({
-      accountId: '', principal: 0, interestRate: 0, termMonths: 0,
+      accountId: null, principal: 0, interestRate: 0, termMonths: 0,
       startDate: '', maturityDate: '', note: '', status: 'active',
       withdrawals: [],
       createdAt: new Date().toISOString().slice(0, 10)
     }, data, { id });
+    if (!rec.accountId) rec.accountId = null;
     await FirebaseClient.setItem('savings', id, rec);
     state.savings.push(rec);
     // Deduct principal from the source account so accounts + savings don't double-count.
@@ -406,11 +407,24 @@
   }
 
   async function updateSavings(id, data) {
+    const prev = state.savings.find((s) => s.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
     await FirebaseClient.updateItem('savings', id, patch);
     const i = state.savings.findIndex((s) => s.id === id);
     if (i >= 0) state.savings[i] = Object.assign({}, state.savings[i], patch);
+    // Rebalance the source account(s) when principal or accountId changed on an
+    // active/matured savings. Withdrawn savings are frozen and skipped.
+    if (prev && prev.status !== 'withdrawn') {
+      const next = state.savings[i];
+      const prevPrincipal = Number(prev.principal || 0);
+      const nextPrincipal = Number(next.principal || 0);
+      if (prev.accountId !== next.accountId || prevPrincipal !== nextPrincipal) {
+        await applyAccountDelta(prev.accountId, prevPrincipal);   // refund old
+        await applyAccountDelta(next.accountId, -nextPrincipal);  // deduct new
+      }
+    }
     emit();
   }
 
@@ -523,15 +537,15 @@
     if (sav.status === 'withdrawn' && sav.finalInterest != null) {
       return Number(sav.finalInterest) || 0;
     }
+    // Vietnamese term-deposit convention: interest is the projected amount
+    // paid at maturity for the full locked term — not daily accrual. Formula:
+    //   interest = principal × rate × termDays / 365
     const principal = Number(sav.principal || 0);
     const rate = Number(sav.interestRate || 0) / 100;
     const start = Fmt.parseDate(sav.startDate);
-    const today = Fmt.today();
     const maturity = Fmt.parseDate(sav.maturityDate);
-    // Interest accrues day-by-day up to (but not past) the maturity date.
-    const end = today < maturity ? today : maturity;
-    const daysElapsed = Math.max(0, Fmt.daysBetween(start, end));
-    return Math.round(principal * rate * daysElapsed / 365);
+    const termDays = Math.max(0, Fmt.daysBetween(start, maturity));
+    return Math.round(principal * rate * termDays / 365);
   }
 
   function savingsStatus(sav) {
@@ -590,12 +604,22 @@
   }
 
   // Cash not held in any tracked account: opening balance + signed sum of
-  // transactions with accountId == null. Transactions that mutate an account
-  // are already reflected in totalAccountsBalance() and are excluded here.
+  // transactions with accountId == null, adjusted for savings funded from cash.
+  // Active/matured cash savings subtract their principal (money locked away);
+  // withdrawn cash savings add back their finalInterest (the earnings credited
+  // to cash on payout — the principal returns implicitly as the subtraction
+  // term drops out). Transactions/savings tied to a tracked account are already
+  // reflected in totalAccountsBalance() and are excluded here.
   function cashBalance() {
     const unlinked = state.transactions.filter((t) => !t.accountId);
     const opening = Number(state.settings.openingBalance || 0);
-    return opening + totalIncome(unlinked) - totalExpense(unlinked);
+    const savingsAdjustment = state.savings
+      .filter((s) => !s.accountId)
+      .reduce((sum, s) => {
+        if (savingsStatus(s) === 'withdrawn') return sum + Number(s.finalInterest || 0);
+        return sum - Number(s.principal || 0);
+      }, 0);
+    return opening + totalIncome(unlinked) - totalExpense(unlinked) + savingsAdjustment;
   }
 
   function currentBalance() {

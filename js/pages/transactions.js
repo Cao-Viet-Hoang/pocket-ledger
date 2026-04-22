@@ -29,11 +29,7 @@
     sort: 'dateDesc'     // dateDesc | dateAsc | amountDesc | amountAsc
   };
 
-  function escapeHTML(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHTML = Fmt.escapeHTML;
 
   function rangeFilter(date, range) {
     const d = Fmt.parseDate(date);
@@ -66,10 +62,18 @@
       if (q) {
         const cat = Store.getCategoryById(t.category);
         const person = t.personId ? Store.getPersonById(t.personId) : null;
+        const account = t.accountId ? Store.getAccountById(t.accountId) : null;
+        const amountRaw = String(t.amount);
+        const amountFormatted = Fmt.formatAmount(t.amount, { absolute: true });
         const hay = [
           t.note || '',
           cat ? I18n.t(cat.nameKey) : '',
-          person ? person.name : ''
+          person ? person.name : '',
+          account ? account.name : '',
+          account && account.bankName ? account.bankName : '',
+          I18n.t('txn.' + t.type),
+          amountRaw,
+          amountFormatted
         ].join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -156,7 +160,7 @@
             </div>
             <div>
               <div class="stat-label">${I18n.t('txn.income')}</div>
-              <div class="stat-value small">${Fmt.formatAmount(totalIn, { absolute: true })}</div>
+              <div class="stat-value small" id="txnStatIncome">${Fmt.formatAmount(totalIn, { absolute: true })}</div>
             </div>
           </div>
           <div class="stat-card">
@@ -166,7 +170,7 @@
             </div>
             <div>
               <div class="stat-label">${I18n.t('txn.expense')}</div>
-              <div class="stat-value small">${Fmt.formatAmount(totalOut, { absolute: true })}</div>
+              <div class="stat-value small" id="txnStatExpense">${Fmt.formatAmount(totalOut, { absolute: true })}</div>
             </div>
           </div>
           <div class="stat-card">
@@ -176,7 +180,7 @@
             </div>
             <div>
               <div class="stat-label">Balance</div>
-              <div class="stat-value small">${(totalIn - totalOut) >= 0 ? '+' : '-'}${Fmt.formatAmount(Math.abs(totalIn - totalOut), { absolute: true })}</div>
+              <div class="stat-value small" id="txnStatNet">${(totalIn - totalOut) >= 0 ? '+' : '-'}${Fmt.formatAmount(Math.abs(totalIn - totalOut), { absolute: true })}</div>
             </div>
           </div>
         </section>
@@ -332,6 +336,18 @@
     });
   }
 
+  function updateStats(container, list) {
+    const totalIn = Store.totalIncome(list);
+    const totalOut = Store.totalExpense(list);
+    const net = totalIn - totalOut;
+    const inEl = container.querySelector('#txnStatIncome');
+    const outEl = container.querySelector('#txnStatExpense');
+    const netEl = container.querySelector('#txnStatNet');
+    if (inEl) inEl.textContent = Fmt.formatAmount(totalIn, { absolute: true });
+    if (outEl) outEl.textContent = Fmt.formatAmount(totalOut, { absolute: true });
+    if (netEl) netEl.textContent = (net >= 0 ? '+' : '-') + Fmt.formatAmount(Math.abs(net), { absolute: true });
+  }
+
   function updateRows(container) {
     const list = applyFilters();
     const tbody = container.querySelector('#txnRows');
@@ -340,6 +356,7 @@
       Icons.render(tbody);
       wireRowActions(container);
     }
+    updateStats(container, list);
   }
 
   global.Pages = global.Pages || {};

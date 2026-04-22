@@ -531,14 +531,10 @@
     const accounts = Store.getAccounts();
     const isEdit = Boolean(existing);
     const initial = existing || {
-      name: '', accountId: accounts[0] ? accounts[0].id : '',
+      name: '', accountId: accounts[0] ? accounts[0].id : null,
       principal: 0, interestRate: 0, termMonths: 6,
       startDate: todayISO(), maturityDate: '', note: ''
     };
-
-    function accountsHTML(accs) {
-      return accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
-    }
 
     const bodyHTML = `
       <div class="form-group" style="margin-bottom: var(--space-3)">
@@ -547,7 +543,7 @@
       </div>
       <div class="form-group" style="margin-bottom: var(--space-3)">
         <label class="form-label">${I18n.t('savings.account')}</label>
-        <select class="select" id="savAccount">${accountsHTML(accounts)}</select>
+        <select class="select" id="savAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
       </div>
 
       <div class="amount-input">
@@ -558,7 +554,7 @@
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
           <label class="form-label">${I18n.t('savings.interestRate')}</label>
-          <input type="number" class="input" id="savRate" step="0.1" min="0" max="100" value="${initial.interestRate || ''}"/>
+          <input type="number" class="input" id="savRate" step="0.01" min="0" max="100" value="${initial.interestRate || ''}"/>
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t('savings.termMonths')}</label>
@@ -596,7 +592,7 @@
           onClick: async () => {
             const root = document.getElementById('modalRoot');
             const name = root.querySelector('#savName').value.trim();
-            const accountId = root.querySelector('#savAccount').value;
+            const accountId = root.querySelector('#savAccount').value || null;
             const principal = parseAmountInput(root.querySelector('#savPrincipal').value);
             const interestRate = parseFloat(root.querySelector('#savRate').value) || 0;
             const termMonths = parseInt(root.querySelector('#savTerm').value, 10) || 0;

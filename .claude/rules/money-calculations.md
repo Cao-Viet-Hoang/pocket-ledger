@@ -11,7 +11,7 @@ Single source of truth for every amount shown in the UI. **Always consult this f
 | `totalPaid(loan)` | `Σ loan.payments[i].amount` | Works for lending and borrowing. |
 | `loanRemaining(loan)` | `max(0, loan.principal − totalPaid(loan))` | Never negative. |
 | `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types. |
-| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null)` | Free-floating cash outside tracked accounts. Untagged transactions feed this. |
+| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment` | Free-floating cash. Includes a savings adjustment — see below. |
 | `currentBalance()` | `totalAccountsBalance() + cashBalance()` | Spendable money (accounts + cash). Hero number on dashboard. |
 | `totalReceivable()` | `Σ loanRemaining(l)` over lending | |
 | `totalPayable()` | `Σ loanRemaining(b)` over borrowing | |
@@ -37,23 +37,30 @@ Paid wins over overdue (a fully-paid past-due loan shows `paid`). This is intent
 
 The `status` field stored on a savings record is only load-bearing for `'withdrawn'`; every other value is recomputed on read.
 
-## Savings interest (simple interest, daily accrual)
+## Savings interest (simple interest, projected at maturity)
 
 ```js
-rate      = interestRate / 100            // interestRate is %/year
-end       = min(today, maturityDate)      // stops accruing at maturity
-days      = max(0, daysBetween(startDate, end))
-interest  = round(principal × rate × days / 365)
+rate      = interestRate / 100                               // interestRate is %/year
+termDays  = max(0, daysBetween(startDate, maturityDate))     // full locked term
+interest  = round(principal × rate × termDays / 365)
 ```
 
-- **Non-compounding** — matches Vietnamese term-deposit convention.
+- **Vietnamese term-deposit convention** — `Tiền lãi = Gốc × Lãi suất × Số ngày gửi / 365`, where "số ngày gửi" is the full locked term. Interest is the **projected amount paid at maturity**, not a daily-accrual figure. A 300M deposit at 7.95% over a 6-month (~182-day) term shows ~11.89M interest (not ~3M after 45 days).
+- **Non-compounding** — simple interest, matches `tiết kiệm có kỳ hạn`.
+- The value is constant for the life of an active/matured savings (principal, rate, and termDays are all fixed); it only changes when the user edits the deposit.
 - Once withdrawn, `savingsInterestEarned` returns the **stored** `finalInterest` (locked in at withdrawal).
 - Integer rounding happens only at the final step.
 
 ## Current balance — unified formula
 
 ```js
-cashBalance    = openingBalance + Σ income(accountId==null) − Σ expense(accountId==null);
+cashSavingsAdjustment = Σ savings.finalInterest  (accountId==null AND status==='withdrawn')
+                      − Σ savings.principal      (accountId==null AND status!=='withdrawn');
+
+cashBalance    = openingBalance
+               + Σ income(accountId==null) − Σ expense(accountId==null)
+               + cashSavingsAdjustment;
+
 currentBalance = totalAccountsBalance() + cashBalance;
 ```
 
@@ -61,12 +68,16 @@ Two disjoint buckets feed the hero:
 
 - **Accounts** — money inside tracked accounts. Mutated by `addTransaction` /
   `updateTransaction` / `deleteTransaction` whenever `accountId` is set, plus by
-  transfers and savings side-effects.
-- **Cash** — money outside any tracked account. Seeded by `openingBalance` and
-  adjusted by every transaction whose `accountId` is `null`.
+  transfers and savings side-effects (when savings has an `accountId`).
+- **Cash** — money outside any tracked account. Seeded by `openingBalance`,
+  adjusted by every transaction whose `accountId` is `null`, and further
+  adjusted by cash-funded savings: while active/matured the principal is
+  locked out of cash (`-principal`); once withdrawn, the subtraction drops and
+  the stored `finalInterest` credits back to cash (the principal returns
+  implicitly).
 
-A stored transaction without the `accountId` field is treated as `null` (pure cash
-entry) so pre-coupling data keeps working without migration.
+A stored transaction / savings without the `accountId` field is treated as
+`null` so pre-coupling data keeps working without migration.
 
 ### Transaction ↔ account coupling
 
@@ -83,14 +94,19 @@ linked account (`0` when unlinked), so the mutations stay symmetric.
 
 ```js
 netWorth = currentBalance()                                        // accounts + cash
-         + Σ (principal + accruedInterest) over non-withdrawn savings
+         + Σ (principal + projectedInterest) over non-withdrawn savings
          + totalReceivable()
          − totalPayable();
 ```
 
-- No double counting: savings principal is already **subtracted** from the source account on create.
-- Interest in `netWorth` is **accrued-to-date**, not final.
-- Cash portion of `currentBalance` is included so untagged transactions still count.
+- No double counting: the savings principal is subtracted from its source when
+  created — the source account (`addSavings` side-effect) for account-funded
+  savings, or the `cashBalance` sum for cash-funded ones. Adding principal back
+  via `Σ non-withdrawn savings.principal` then correctly reclassifies it as
+  "locked wealth" instead of "spendable balance".
+- Interest in `netWorth` is **projected at maturity** (same formula as the savings card / hero) — forward-looking wealth on the assumption the deposit is held to term.
+- Cash portion of `currentBalance` is included so untagged transactions and
+  cash-funded savings still count.
 
 ## Transfers
 

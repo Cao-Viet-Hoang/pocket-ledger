@@ -72,17 +72,18 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 | `totalAccountsBalance` | `Σ account.balance` |
 | `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null)` (untagged transactions = free-floating cash) |
 | `currentBalance` | `totalAccountsBalance + cashBalance` (unified — accounts + untagged cash) |
-| `savingsInterestEarned` | `principal × rate × daysElapsed / 365` (simple, capped at maturity). Once withdrawn, uses stored `finalInterest`. |
+| `savingsInterestEarned` | `principal × rate × termDays / 365` — projected interest at maturity for the full locked term (Vietnamese term-deposit convention). Once withdrawn, uses stored `finalInterest`. |
 | `totalSavingsPrincipal` / `totalSavingsInterest` | excludes `status === 'withdrawn'` |
-| `netWorth` | `currentBalance + activeSavings(principal + accruedInterest) + receivables − payables` |
+| `netWorth` | `currentBalance + activeSavings(principal + projectedInterest) + receivables − payables` |
 | `loanRemaining` | `max(0, principal − Σ payments.amount)` |
 | `loanStatus` | `paid` (remaining≤0) > `overdue` (due<today) > `partial` (paid>0) > `unpaid` |
 | `totalReceivable` / `totalPayable` | `Σ loanRemaining` over lending / borrowing |
 
 **Side-effects wired through `Store.*`:**
-- `addSavings` deducts principal from source account.
-- `withdrawSavings` returns `principal + interest` to source account, stamps `finalInterest` / `finalAmount`.
-- `deleteSavings` refunds principal if not yet withdrawn.
+- `addSavings` deducts principal from source account when `accountId` is set; when `null`, the principal is subtracted from `cashBalance` instead.
+- `withdrawSavings` returns `principal + interest` to the source (account or cash), stamps `finalInterest` / `finalAmount`.
+- `deleteSavings` refunds principal (to account or cash) if not yet withdrawn.
+- `updateSavings` rebalances the source(s) when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
 - `addTransfer` / `deleteTransfer` mutate both accounts (rolls back on delete).
 - `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` when `accountId` is set (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one. When `accountId` is `null`, the transaction is a pure cash-journal entry — no account is touched, but it still contributes to `cashBalance`.
 

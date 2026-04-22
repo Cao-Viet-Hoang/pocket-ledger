@@ -64,7 +64,7 @@
           </div>
           <div>
             <dt>${I18n.t('savings.interestRate')}</dt>
-            <dd>${Number(sav.interestRate || 0).toFixed(1)}%</dd>
+            <dd>${Number(Number(sav.interestRate || 0).toFixed(2))}%</dd>
           </div>
           <div>
             <dt>${I18n.t('savings.interestEarned')}</dt>
