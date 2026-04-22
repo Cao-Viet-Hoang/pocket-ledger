@@ -108,7 +108,6 @@
     if (diff === 0) return t('time.today');
     if (diff === -1) return t('time.yesterday');
     if (diff < 0) return t('time.daysAgo', { n: Math.abs(diff) });
-    if (diff === 0) return t('time.today');
     return formatDateShort(value, lang);
   }
 
@@ -128,6 +127,12 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  function escapeHTML(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   global.Fmt = {
     formatAmount,
     formatCompact,
@@ -139,6 +144,7 @@
     parseDate,
     daysBetween,
     today,
-    initials
+    initials,
+    escapeHTML
   };
 })(window);

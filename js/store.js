@@ -31,6 +31,9 @@
     transactions: [],
     lending: [],
     borrowing: [],
+    accounts: [],
+    savings: [],
+    transfers: [],
     settings: Object.assign({}, DEFAULT_SETTINGS)
   };
 
@@ -96,11 +99,14 @@
 
     if (seedSample) {
       // Only seed sample tx/people/loans if these collections are empty.
-      const [people, txns, lending, borrowing] = await Promise.all([
+      const [people, txns, lending, borrowing, accounts, savings, transfers] = await Promise.all([
         FirebaseClient.getAll('people'),
         FirebaseClient.getAll('transactions'),
         FirebaseClient.getAll('lending'),
-        FirebaseClient.getAll('borrowing')
+        FirebaseClient.getAll('borrowing'),
+        FirebaseClient.getAll('accounts'),
+        FirebaseClient.getAll('savings'),
+        FirebaseClient.getAll('transfers')
       ]);
       if (people.length === 0 && txns.length === 0 && lending.length === 0 && borrowing.length === 0) {
         const [mockPeople, mockTxns, mockLending, mockBorrowing] = await Promise.all([
@@ -114,6 +120,18 @@
         for (const l of mockLending) tasks.push(FirebaseClient.setItem('lending', l.id, l));
         for (const b of mockBorrowing) tasks.push(FirebaseClient.setItem('borrowing', b.id, b));
       }
+      if (accounts.length === 0) {
+        const mockAccounts = await loadJSON('data/accounts.json').catch(() => []);
+        for (const a of mockAccounts) tasks.push(FirebaseClient.setItem('accounts', a.id, a));
+      }
+      if (savings.length === 0) {
+        const mockSavings = await loadJSON('data/savings.json').catch(() => []);
+        for (const s of mockSavings) tasks.push(FirebaseClient.setItem('savings', s.id, s));
+      }
+      if (transfers.length === 0) {
+        const mockTransfers = await loadJSON('data/transfers.json').catch(() => []);
+        for (const tf of mockTransfers) tasks.push(FirebaseClient.setItem('transfers', tf.id, tf));
+      }
     }
 
     if (tasks.length) {
@@ -123,13 +141,16 @@
   }
 
   async function fetchAll() {
-    const [meta, cats, people, txns, lend, borr] = await Promise.all([
+    const [meta, cats, people, txns, lend, borr, accs, savs, tfs] = await Promise.all([
       FirebaseClient.getUserMeta(),
       FirebaseClient.getAll('categories'),
       FirebaseClient.getAll('people'),
       FirebaseClient.getAll('transactions'),
       FirebaseClient.getAll('lending'),
-      FirebaseClient.getAll('borrowing')
+      FirebaseClient.getAll('borrowing'),
+      FirebaseClient.getAll('accounts'),
+      FirebaseClient.getAll('savings'),
+      FirebaseClient.getAll('transfers')
     ]);
     state.settings = Object.assign({}, DEFAULT_SETTINGS, (meta && meta.settings) || {});
     state.categories = cats;
@@ -137,6 +158,9 @@
     state.transactions = txns;
     state.lending = lend;
     state.borrowing = borr;
+    state.accounts = accs;
+    state.savings = savs;
+    state.transfers = tfs;
     state.loaded = true;
   }
 
@@ -161,6 +185,9 @@
     state.transactions = [];
     state.lending = [];
     state.borrowing = [];
+    state.accounts = [];
+    state.savings = [];
+    state.transfers = [];
     state.settings = Object.assign({}, DEFAULT_SETTINGS);
     clearStoredCredentials();
     emit();
@@ -274,6 +301,149 @@
     emit();
   }
 
+  // ---- Accounts ---------------------------------------------------------
+
+  async function addAccount(data) {
+    const id = data.id || genId('acc');
+    const rec = Object.assign({
+      type: 'cash', bankName: '', accountNumber: '', balance: 0,
+      icon: 'wallet', color: 1, note: '',
+      createdAt: new Date().toISOString().slice(0, 10)
+    }, data, { id });
+    await FirebaseClient.setItem('accounts', id, rec);
+    state.accounts.push(rec);
+    emit();
+    return rec;
+  }
+
+  async function updateAccount(id, data) {
+    const patch = Object.assign({}, data);
+    delete patch.id;
+    await FirebaseClient.updateItem('accounts', id, patch);
+    const i = state.accounts.findIndex((a) => a.id === id);
+    if (i >= 0) state.accounts[i] = Object.assign({}, state.accounts[i], patch);
+    emit();
+  }
+
+  async function deleteAccount(id) {
+    await FirebaseClient.deleteItem('accounts', id);
+    state.accounts = state.accounts.filter((a) => a.id !== id);
+    emit();
+  }
+
+  // ---- Savings ----------------------------------------------------------
+
+  async function addSavings(data) {
+    const id = data.id || genId('sav');
+    const rec = Object.assign({
+      accountId: '', principal: 0, interestRate: 0, termMonths: 0,
+      startDate: '', maturityDate: '', note: '', status: 'active',
+      withdrawals: [],
+      createdAt: new Date().toISOString().slice(0, 10)
+    }, data, { id });
+    await FirebaseClient.setItem('savings', id, rec);
+    state.savings.push(rec);
+    // Deduct principal from the source account so accounts + savings don't double-count.
+    const acc = rec.accountId ? state.accounts.find((a) => a.id === rec.accountId) : null;
+    if (acc) {
+      acc.balance = Number(acc.balance || 0) - Number(rec.principal || 0);
+      await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
+    }
+    emit();
+    return rec;
+  }
+
+  async function updateSavings(id, data) {
+    const patch = Object.assign({}, data);
+    delete patch.id;
+    await FirebaseClient.updateItem('savings', id, patch);
+    const i = state.savings.findIndex((s) => s.id === id);
+    if (i >= 0) state.savings[i] = Object.assign({}, state.savings[i], patch);
+    emit();
+  }
+
+  async function withdrawSavings(id) {
+    const sav = state.savings.find((s) => s.id === id);
+    if (!sav || sav.status === 'withdrawn') return;
+    const interest = savingsInterestEarned(sav);
+    const payout = Number(sav.principal || 0) + interest;
+    const patch = {
+      status: 'withdrawn',
+      withdrawnAt: new Date().toISOString().slice(0, 10),
+      finalAmount: payout,
+      finalInterest: interest
+    };
+    await FirebaseClient.updateItem('savings', id, patch);
+    Object.assign(sav, patch);
+    // Return principal + interest to the source account.
+    const acc = sav.accountId ? state.accounts.find((a) => a.id === sav.accountId) : null;
+    if (acc) {
+      acc.balance = Number(acc.balance || 0) + payout;
+      await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
+    }
+    emit();
+    return sav;
+  }
+
+  async function deleteSavings(id) {
+    const sav = state.savings.find((s) => s.id === id);
+    // If the savings is still active/matured (not yet withdrawn), refund principal
+    // to the source account — otherwise deleting would silently lose that money.
+    if (sav && sav.status !== 'withdrawn') {
+      const acc = sav.accountId ? state.accounts.find((a) => a.id === sav.accountId) : null;
+      if (acc) {
+        acc.balance = Number(acc.balance || 0) + Number(sav.principal || 0);
+        await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
+      }
+    }
+    await FirebaseClient.deleteItem('savings', id);
+    state.savings = state.savings.filter((s) => s.id !== id);
+    emit();
+  }
+
+  // ---- Transfers --------------------------------------------------------
+
+  async function addTransfer(data) {
+    const id = data.id || genId('tf');
+    const rec = Object.assign({ note: '' }, data, { id });
+    await FirebaseClient.setItem('transfers', id, rec);
+    state.transfers.push(rec);
+    // Update account balances
+    const fromAcc = state.accounts.find((a) => a.id === rec.fromAccountId);
+    const toAcc = state.accounts.find((a) => a.id === rec.toAccountId);
+    const amount = Number(rec.amount || 0);
+    if (fromAcc) {
+      fromAcc.balance = Number(fromAcc.balance || 0) - amount;
+      await FirebaseClient.updateItem('accounts', fromAcc.id, { balance: fromAcc.balance });
+    }
+    if (toAcc) {
+      toAcc.balance = Number(toAcc.balance || 0) + amount;
+      await FirebaseClient.updateItem('accounts', toAcc.id, { balance: toAcc.balance });
+    }
+    emit();
+    return rec;
+  }
+
+  async function deleteTransfer(id) {
+    const tf = state.transfers.find((t) => t.id === id);
+    if (tf) {
+      const amount = Number(tf.amount || 0);
+      const fromAcc = state.accounts.find((a) => a.id === tf.fromAccountId);
+      const toAcc = state.accounts.find((a) => a.id === tf.toAccountId);
+      if (fromAcc) {
+        fromAcc.balance = Number(fromAcc.balance || 0) + amount;
+        await FirebaseClient.updateItem('accounts', fromAcc.id, { balance: fromAcc.balance });
+      }
+      if (toAcc) {
+        toAcc.balance = Number(toAcc.balance || 0) - amount;
+        await FirebaseClient.updateItem('accounts', toAcc.id, { balance: toAcc.balance });
+      }
+    }
+    await FirebaseClient.deleteItem('transfers', id);
+    state.transfers = state.transfers.filter((t) => t.id !== id);
+    emit();
+  }
+
   // ---- Selectors --------------------------------------------------------
 
   function getCategories() { return state.categories.slice(); }
@@ -285,6 +455,52 @@
   function getTransactions() { return state.transactions.slice(); }
   function getLending() { return state.lending.slice(); }
   function getBorrowing() { return state.borrowing.slice(); }
+
+  function getAccounts() { return state.accounts.slice(); }
+  function getAccountById(id) { return state.accounts.find((a) => a.id === id) || null; }
+  function getSavings() { return state.savings.slice(); }
+  function getSavingsById(id) { return state.savings.find((s) => s.id === id) || null; }
+  function getTransfers() { return state.transfers.slice(); }
+
+  function totalAccountsBalance() {
+    return state.accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+  }
+
+  function savingsInterestEarned(sav) {
+    // Once withdrawn, the interest is locked in — use the stored value.
+    if (sav.status === 'withdrawn' && sav.finalInterest != null) {
+      return Number(sav.finalInterest) || 0;
+    }
+    const principal = Number(sav.principal || 0);
+    const rate = Number(sav.interestRate || 0) / 100;
+    const start = Fmt.parseDate(sav.startDate);
+    const today = Fmt.today();
+    const maturity = Fmt.parseDate(sav.maturityDate);
+    // Interest accrues day-by-day up to (but not past) the maturity date.
+    const end = today < maturity ? today : maturity;
+    const daysElapsed = Math.max(0, Fmt.daysBetween(start, end));
+    return Math.round(principal * rate * daysElapsed / 365);
+  }
+
+  function savingsStatus(sav) {
+    if (sav.status === 'withdrawn') return 'withdrawn';
+    const today = Fmt.today();
+    const maturity = Fmt.parseDate(sav.maturityDate);
+    if (today >= maturity) return 'matured';
+    return 'active';
+  }
+
+  function totalSavingsPrincipal() {
+    return state.savings
+      .filter((s) => savingsStatus(s) !== 'withdrawn')
+      .reduce((sum, s) => sum + Number(s.principal || 0), 0);
+  }
+
+  function totalSavingsInterest() {
+    return state.savings
+      .filter((s) => savingsStatus(s) !== 'withdrawn')
+      .reduce((sum, s) => sum + savingsInterestEarned(s), 0);
+  }
 
   function totalPaid(loan) {
     return (loan.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -322,8 +538,21 @@
   }
 
   function currentBalance() {
+    // When the user has configured accounts, treat the sum of account balances
+    // as the authoritative cash position (accounts are where money actually lives).
+    // Otherwise, fall back to the journal-entry formula: opening + income - expense.
+    if (state.accounts.length > 0) return totalAccountsBalance();
     const opening = Number(state.settings.openingBalance || 0);
     return opening + totalIncome() - totalExpense();
+  }
+
+  function netWorth() {
+    // Total accessible wealth: cash in accounts + money locked in active savings
+    // (principal + accrued interest) + receivables - payables.
+    const savingsValue = state.savings
+      .filter((s) => savingsStatus(s) !== 'withdrawn')
+      .reduce((sum, s) => sum + Number(s.principal || 0) + savingsInterestEarned(s), 0);
+    return totalAccountsBalance() + savingsValue + totalReceivable() - totalPayable();
   }
 
   function totalReceivable() {
@@ -418,6 +647,11 @@
     getTransactions,
     getLending,
     getBorrowing,
+    getAccounts,
+    getAccountById,
+    getSavings,
+    getSavingsById,
+    getTransfers,
 
     // Computed
     totalPaid,
@@ -435,6 +669,12 @@
     personUserOwes,
     spendingByCategory,
     dailySeries,
+    totalAccountsBalance,
+    netWorth,
+    savingsInterestEarned,
+    savingsStatus,
+    totalSavingsPrincipal,
+    totalSavingsInterest,
 
     // Mutations
     addTransaction,
@@ -447,7 +687,16 @@
     updateLoan,
     deleteLoan,
     addLoanPayment,
-    removeLoanPayment
+    removeLoanPayment,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    addSavings,
+    updateSavings,
+    withdrawSavings,
+    deleteSavings,
+    addTransfer,
+    deleteTransfer
   };
 
   global.Store = Store;

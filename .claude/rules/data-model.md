@@ -1,0 +1,123 @@
+# Data model — Pocket Ledger
+
+Authoritative schema of every entity, where it lives, which functions mutate it, and the invariants that must hold.
+
+## Storage layout
+
+All data lives under the user's Firestore root:
+
+```
+ledgers/{username}                           ← meta doc
+ledgers/{username}/categories/{id}
+ledgers/{username}/people/{id}
+ledgers/{username}/transactions/{id}
+ledgers/{username}/lending/{id}              ← payments = array field
+ledgers/{username}/borrowing/{id}            ← payments = array field
+ledgers/{username}/accounts/{id}
+ledgers/{username}/savings/{id}
+ledgers/{username}/transfers/{id}
+```
+
+Meta doc shape: `{ settings: { currency, openingBalance, defaultLanguage }, seededAt }`.
+
+All collections are mirrored into `state.*` in `store.js` on load; mutations write both Firestore and the local cache, then `emit()`.
+
+## Entity schemas
+
+### `categories`
+```json
+{ "id": "food", "nameKey": "cat.food", "type": "expense", "icon": "bowl", "tone": "expense" }
+```
+- `type`: `'income' | 'expense'`
+- `tone`: one of `income | expense | warning | info | primary | purple`
+- `nameKey` must exist in **both** locale files
+- Seeded from `data/categories.json` if empty on connect; required for the app to function
+
+### `people`
+```json
+{ "id": "p-001", "name": "…", "phone": "", "note": "", "color": 1, "createdAt": "yyyy-mm-dd" }
+```
+- `color ∈ 1..6` — maps to `.avatar-p1`..`.avatar-p6`
+- Defaults filled in `store.addPerson`
+
+### `transactions`
+```json
+{ "id": "t-001", "type": "income", "amount": 25000000, "category": "salary",
+  "date": "2026-04-01", "personId": null, "note": "…" }
+```
+- `type`: `'income' | 'expense'`
+- `amount`: positive integer (sign comes from `type`)
+- `category`: must be an existing `categories[].id`
+- `personId`: nullable
+- **Invariant**: transactions do **not** mutate any account balance. See `.claude/rules/money-calculations.md` §"Why transactions don't touch accounts".
+
+### `lending` / `borrowing`
+```json
+{
+  "id": "l-001",
+  "personId": "p-001",
+  "principal": 5000000,
+  "startDate": "2026-02-15",
+  "dueDate": "2026-05-15",
+  "note": "…",
+  "payments": [
+    { "id": "lp-001", "date": "yyyy-mm-dd", "amount": 1000000, "note": "…" }
+  ]
+}
+```
+- `payments` is a Firestore array field, mutated via `FirebaseClient.arrayUnion` / `arrayRemove`.
+- Payment id prefixes: `lp-` for lending, `bp-` for borrowing.
+- **Invariants**: `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
+
+### `accounts`
+```json
+{
+  "id": "acc-cash", "name": "Tiền mặt",
+  "type": "cash", "bankName": "", "accountNumber": "",
+  "balance": 5000000, "icon": "wallet", "color": 1,
+  "note": "", "createdAt": "yyyy-mm-dd"
+}
+```
+- `type`: `'cash' | 'bank' | 'ewallet'`
+- `balance` is the **current** balance and is mutated directly by savings / transfers (not by transactions).
+- **Invariant**: `balance` can go negative in the local cache if external mutations drift; the UI prevents most negative paths (transfer checks sufficient balance).
+
+### `savings`
+```json
+{
+  "id": "sav-001", "name": "…",
+  "accountId": "acc-vcb", "principal": 50000000,
+  "interestRate": 5.5, "termMonths": 6,
+  "startDate": "2025-10-01", "maturityDate": "2026-04-01",
+  "status": "active", "withdrawals": [],
+  "note": "…", "createdAt": "yyyy-mm-dd",
+  "withdrawnAt": "…", "finalAmount": 0, "finalInterest": 0
+}
+```
+- `interestRate` is **%/year** (5.5 means 5.5%).
+- `status` stored value is only load-bearing for `'withdrawn'`. Otherwise status is **dynamically computed** from `maturityDate` vs. today — see `store.savingsStatus`.
+- `withdrawnAt`, `finalAmount`, `finalInterest` are set by `Store.withdrawSavings` and must not be edited elsewhere.
+- **Invariants**:
+  - Creating savings deducts `principal` from `accounts[accountId].balance`.
+  - Withdrawing returns `principal + accruedInterest` to the source account.
+  - Deleting an active/matured savings refunds `principal` to the source account. Deleting a withdrawn one is a pure delete.
+
+### `transfers`
+```json
+{ "id": "tf-001", "fromAccountId": "acc-vcb", "toAccountId": "acc-cash",
+  "amount": 3000000, "date": "yyyy-mm-dd", "note": "…" }
+```
+- **Invariant**: `fromAccountId !== toAccountId` (enforced in `Forms.transferForm`).
+- `addTransfer` subtracts from source, adds to destination.
+- `deleteTransfer` reverses the mutation.
+
+## Cross-entity invariants (not enforced — respect them in new code)
+
+1. **Account ↔ savings coupling.** Savings is always linked to an account. Breaking the link (e.g. deleting the account) orphans the savings — the UI tolerates it but the balance math goes slightly wrong. If you add a delete-account flow that touches savings, decide explicitly: cascade, block, or warn.
+2. **Transactions have no `accountId`.** A user who both tracks accounts and logs expense transactions will see two independent views. This is intentional — see money-calculations.md.
+3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app.
+4. **Categories are global per-user.** Deleting a category orphans any transaction using it (UI shows `—`). No delete-category flow exists yet; if you add one, warn or reassign.
+
+## Id generation
+
+`store.genId(prefix)` → `"{prefix}-{base36 timestamp}-{5 random chars}"`. Keep using prefixes listed above so ids stay searchable / greppable.

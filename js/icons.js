@@ -63,10 +63,17 @@
     'trending-down': svg('<path d="M3 7 9 13l4-4 8 8"/><path d="M14 17h7v-7"/>'),
     coins: svg('<circle cx="8" cy="8" r="5.5"/><path d="M15.5 5.5A5.5 5.5 0 1 1 16 16.5"/><path d="M11.5 13.5A5.5 5.5 0 1 1 16 21"/>'),
     scale: svg('<path d="M12 3v18"/><path d="M5 21h14"/><path d="M6 8h12"/><path d="M6 8 3 14a3 3 0 0 0 6 0Z"/><path d="m18 8-3 6a3 3 0 0 0 6 0Z"/>'),
-    'piggy-bank': svg('<path d="M19 12a7 7 0 1 1-12-5h0a3 3 0 0 1 5 0"/><circle cx="15" cy="11" r="1" fill="currentColor" stroke="none"/><path d="M19 10h2v4h-2"/><path d="M6 18v3"/><path d="M14 18v3"/>'),
+    'piggy-bank': svg('<path d="M10 5a1 1 0 0 1 1-1h2a1 1 0 0 1 0 2h-2a1 1 0 0 1-1-1Z"/><path d="M7.5 8C4.5 8 2 10.7 2 14s2.5 6 5.5 6h9c3 0 5.5-2.7 5.5-6 0-1.7-.7-3.2-1.8-4.3"/><circle cx="16" cy="12" r="1" fill="currentColor" stroke="none"/><path d="M2 12H1"/><path d="M22 12h-1"/><path d="M7 20v2"/><path d="M17 20v2"/>'),
     download: svg('<path d="M12 3v12"/><path d="m6 11 6 6 6-6"/><path d="M4 19h16"/>'),
     upload: svg('<path d="M12 21V9"/><path d="m6 13 6-6 6 6"/><path d="M4 5h16"/>'),
-    'more-horizontal': svg('<circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/>')
+    'more-horizontal': svg('<circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/>'),
+
+    // Accounts & Savings
+    bank: svg('<path d="M3 21h18"/><path d="M3 10h18"/><path d="M12 3 2 10h20Z"/><path d="M5 10v8"/><path d="M9 10v8"/><path d="M15 10v8"/><path d="M19 10v8"/>'),
+    smartphone: svg('<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 18h.01"/>'),
+    vault: svg('<rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5v7"/><path d="M8.5 12h7"/><path d="M22 8h-1"/><path d="M22 16h-1"/><path d="M6 20v1"/><path d="M18 20v1"/>'),
+    'arrow-left-right': svg('<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>'),
+    percent: svg('<circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/><path d="M20 4 4 20"/>')
   };
 
   function get(name) {

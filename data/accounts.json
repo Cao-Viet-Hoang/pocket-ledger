@@ -1,0 +1,38 @@
+[
+  {
+    "id": "acc-cash",
+    "name": "Tiền mặt",
+    "type": "cash",
+    "bankName": "",
+    "accountNumber": "",
+    "balance": 5000000,
+    "icon": "wallet",
+    "color": 1,
+    "note": "",
+    "createdAt": "2025-01-01"
+  },
+  {
+    "id": "acc-vcb",
+    "name": "Vietcombank",
+    "type": "bank",
+    "bankName": "Vietcombank",
+    "accountNumber": "1234567890",
+    "balance": 25000000,
+    "icon": "bank",
+    "color": 3,
+    "note": "Tài khoản lương",
+    "createdAt": "2025-01-01"
+  },
+  {
+    "id": "acc-momo",
+    "name": "Momo",
+    "type": "ewallet",
+    "bankName": "",
+    "accountNumber": "0987654321",
+    "balance": 2000000,
+    "icon": "smartphone",
+    "color": 6,
+    "note": "",
+    "createdAt": "2025-01-15"
+  }
+]

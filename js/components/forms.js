@@ -381,6 +381,289 @@
     personForm,
     loanForm,
     paymentForm,
-    confirm
+    confirm,
+    accountForm,
+    savingsForm,
+    transferForm
   };
+
+  // ---- Account form -----------------------------------------------------
+
+  function accountForm(existing) {
+    const isEdit = Boolean(existing);
+    const initial = existing || { name: '', type: 'bank', bankName: '', accountNumber: '', balance: 0, note: '' };
+
+    const bodyHTML = `
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('account.name')}</label>
+        <input type="text" class="input" id="accName" value="${escapeHTML(initial.name)}" placeholder="${I18n.t('account.namePlaceholder')}" autocomplete="off"/>
+      </div>
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('account.type')}</label>
+        <select class="select" id="accType">
+          <option value="cash" ${initial.type === 'cash' ? 'selected' : ''}>${I18n.t('account.type.cash')}</option>
+          <option value="bank" ${initial.type === 'bank' ? 'selected' : ''}>${I18n.t('account.type.bank')}</option>
+          <option value="ewallet" ${initial.type === 'ewallet' ? 'selected' : ''}>${I18n.t('account.type.ewallet')}</option>
+        </select>
+      </div>
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('account.bankName')}</label>
+          <input type="text" class="input" id="accBankName" value="${escapeHTML(initial.bankName || '')}" autocomplete="off"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('account.accountNumber')}</label>
+          <input type="text" class="input" id="accNumber" value="${escapeHTML(initial.accountNumber || '')}" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div class="amount-input">
+        <span class="currency">${Store.currency.symbol}</span>
+        <input type="text" placeholder="0" id="accBalance" autocomplete="off" value="${initial.balance ? Number(initial.balance).toLocaleString('en-US') : ''}"/>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">${I18n.t('txn.note')}</label>
+        <textarea class="textarea" id="accNote" placeholder="${I18n.t('txn.description')}">${escapeHTML(initial.note || '')}</textarea>
+      </div>
+    `;
+
+    Modal.open({
+      title: isEdit ? I18n.t('action.edit.account') : I18n.t('action.add.account'),
+      subtitle: I18n.t('page.accounts.subtitle'),
+      bodyHTML,
+      actions: [
+        { label: I18n.t('action.cancel'), variant: 'secondary' },
+        {
+          label: isEdit ? I18n.t('action.save') : I18n.t('action.add'),
+          variant: 'primary',
+          keepOpen: true,
+          onClick: async () => {
+            const root = document.getElementById('modalRoot');
+            const name = root.querySelector('#accName').value.trim();
+            const type = root.querySelector('#accType').value;
+            const bankName = root.querySelector('#accBankName').value.trim();
+            const accountNumber = root.querySelector('#accNumber').value.trim();
+            const balance = parseAmountInput(root.querySelector('#accBalance').value);
+            const note = root.querySelector('#accNote').value.trim();
+            if (!name) { Toast.show(I18n.t('form.nameRequired')); return; }
+            try {
+              if (isEdit) await Store.updateAccount(existing.id, { name, type, bankName, accountNumber, balance, note });
+              else await Store.addAccount({ name, type, bankName, accountNumber, balance, note });
+              Modal.close();
+              Toast.show(I18n.t('toast.saved'));
+            } catch (err) {
+              console.error(err);
+              Toast.show(err && err.message ? err.message : 'Error');
+            }
+          }
+        }
+      ]
+    });
+
+    wireAmountInput(document.getElementById('modalRoot').querySelector('#accBalance'));
+  }
+
+  // ---- Savings form -----------------------------------------------------
+
+  function savingsForm(existing) {
+    const accounts = Store.getAccounts();
+    const isEdit = Boolean(existing);
+    const initial = existing || {
+      name: '', accountId: accounts[0] ? accounts[0].id : '',
+      principal: 0, interestRate: 0, termMonths: 6,
+      startDate: todayISO(), maturityDate: '', note: ''
+    };
+
+    function accountsHTML(accs) {
+      return accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
+    }
+
+    const bodyHTML = `
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('savings.name')}</label>
+        <input type="text" class="input" id="savName" value="${escapeHTML(initial.name)}" placeholder="${I18n.t('savings.namePlaceholder')}" autocomplete="off"/>
+      </div>
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('savings.account')}</label>
+        <select class="select" id="savAccount">${accountsHTML(accounts)}</select>
+      </div>
+
+      <div class="amount-input">
+        <span class="currency">${Store.currency.symbol}</span>
+        <input type="text" placeholder="0" id="savPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
+      </div>
+
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('savings.interestRate')}</label>
+          <input type="number" class="input" id="savRate" step="0.1" min="0" max="100" value="${initial.interestRate || ''}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('savings.termMonths')}</label>
+          <input type="number" class="input" id="savTerm" min="1" max="360" value="${initial.termMonths || ''}"/>
+        </div>
+      </div>
+
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('savings.startDate')}</label>
+          <input type="date" class="input" id="savStart" value="${initial.startDate}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('savings.maturityDate')}</label>
+          <input type="date" class="input" id="savMaturity" value="${initial.maturityDate}" readonly style="background:var(--color-surface-2)"/>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">${I18n.t('txn.note')}</label>
+        <textarea class="textarea" id="savNote" placeholder="${I18n.t('txn.description')}">${escapeHTML(initial.note || '')}</textarea>
+      </div>
+    `;
+
+    Modal.open({
+      title: isEdit ? I18n.t('action.edit.savings') : I18n.t('action.add.savings'),
+      subtitle: I18n.t('page.savings.subtitle'),
+      bodyHTML,
+      actions: [
+        { label: I18n.t('action.cancel'), variant: 'secondary' },
+        {
+          label: isEdit ? I18n.t('action.save') : I18n.t('action.add'),
+          variant: 'primary',
+          keepOpen: true,
+          onClick: async () => {
+            const root = document.getElementById('modalRoot');
+            const name = root.querySelector('#savName').value.trim();
+            const accountId = root.querySelector('#savAccount').value;
+            const principal = parseAmountInput(root.querySelector('#savPrincipal').value);
+            const interestRate = parseFloat(root.querySelector('#savRate').value) || 0;
+            const termMonths = parseInt(root.querySelector('#savTerm').value, 10) || 0;
+            const startDate = root.querySelector('#savStart').value;
+            const maturityDate = root.querySelector('#savMaturity').value;
+            const note = root.querySelector('#savNote').value.trim();
+
+            if (!name) { Toast.show(I18n.t('form.nameRequired')); return; }
+            if (!principal) { Toast.show(I18n.t('form.amountRequired')); return; }
+            if (!interestRate) { Toast.show(I18n.t('form.interestRequired')); return; }
+            if (!termMonths) { Toast.show(I18n.t('form.termRequired')); return; }
+            if (!startDate) { Toast.show(I18n.t('form.dateRequired')); return; }
+
+            try {
+              const data = { name, accountId, principal, interestRate, termMonths, startDate, maturityDate, note };
+              if (isEdit) await Store.updateSavings(existing.id, data);
+              else await Store.addSavings(data);
+              Modal.close();
+              Toast.show(I18n.t('toast.saved'));
+            } catch (err) {
+              console.error(err);
+              Toast.show(err && err.message ? err.message : 'Error');
+            }
+          }
+        }
+      ]
+    });
+
+    const root = document.getElementById('modalRoot');
+    if (initial.accountId) root.querySelector('#savAccount').value = initial.accountId;
+    wireAmountInput(root.querySelector('#savPrincipal'));
+
+    // Auto-calc maturity date
+    function calcMaturity() {
+      const start = root.querySelector('#savStart').value;
+      const months = parseInt(root.querySelector('#savTerm').value, 10) || 0;
+      if (start && months > 0) {
+        const d = new Date(start);
+        d.setMonth(d.getMonth() + months);
+        root.querySelector('#savMaturity').value = d.toISOString().slice(0, 10);
+      }
+    }
+    root.querySelector('#savStart').addEventListener('change', calcMaturity);
+    root.querySelector('#savTerm').addEventListener('input', calcMaturity);
+    if (!initial.maturityDate) calcMaturity();
+  }
+
+  // ---- Transfer form ----------------------------------------------------
+
+  function transferForm() {
+    const accounts = Store.getAccounts();
+    if (accounts.length < 2) {
+      Toast.show(I18n.t('transfer.sameAccount'));
+      return;
+    }
+
+    function accountsHTML(accs) {
+      return accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)} (${Fmt.formatAmount(a.balance, { absolute: true })})</option>`).join('');
+    }
+
+    const bodyHTML = `
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('transfer.from')}</label>
+        <select class="select" id="tfFrom">${accountsHTML(accounts)}</select>
+      </div>
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('transfer.to')}</label>
+        <select class="select" id="tfTo">${accountsHTML(accounts)}</select>
+      </div>
+
+      <div class="amount-input">
+        <span class="currency">${Store.currency.symbol}</span>
+        <input type="text" placeholder="0" id="tfAmount" autocomplete="off"/>
+      </div>
+
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('txn.date')}</label>
+        <input type="date" class="input" id="tfDate" value="${todayISO()}"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${I18n.t('txn.note')}</label>
+        <textarea class="textarea" id="tfNote" placeholder="${I18n.t('txn.description')}"></textarea>
+      </div>
+    `;
+
+    Modal.open({
+      title: I18n.t('transfer.title'),
+      bodyHTML,
+      actions: [
+        { label: I18n.t('action.cancel'), variant: 'secondary' },
+        {
+          label: I18n.t('action.add.transfer'),
+          variant: 'primary',
+          keepOpen: true,
+          onClick: async () => {
+            const root = document.getElementById('modalRoot');
+            const fromAccountId = root.querySelector('#tfFrom').value;
+            const toAccountId = root.querySelector('#tfTo').value;
+            const amount = parseAmountInput(root.querySelector('#tfAmount').value);
+            const date = root.querySelector('#tfDate').value;
+            const note = root.querySelector('#tfNote').value.trim();
+
+            if (fromAccountId === toAccountId) { Toast.show(I18n.t('transfer.sameAccount')); return; }
+            if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
+            if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
+
+            const fromAcc = Store.getAccountById(fromAccountId);
+            if (fromAcc && Number(fromAcc.balance || 0) < amount) {
+              Toast.show(I18n.t('transfer.insufficientBalance'));
+              return;
+            }
+
+            try {
+              await Store.addTransfer({ fromAccountId, toAccountId, amount, date, note });
+              Modal.close();
+              Toast.show(I18n.t('toast.saved'));
+            } catch (err) {
+              console.error(err);
+              Toast.show(err && err.message ? err.message : 'Error');
+            }
+          }
+        }
+      ]
+    });
+
+    // Pre-select second account for "to"
+    const root = document.getElementById('modalRoot');
+    if (accounts.length > 1) root.querySelector('#tfTo').value = accounts[1].id;
+    wireAmountInput(root.querySelector('#tfAmount'));
+  }
 })(window);

@@ -102,6 +102,9 @@
 
     const upcoming = Store.upcomingDueLoans(14).slice(0, 5);
 
+    const accounts = Store.getAccounts();
+    const activeSavings = Store.getSavings().filter((s) => Store.savingsStatus(s) !== 'withdrawn');
+
     container.innerHTML = `
       <div class="page">
         <section class="hero-balance">
@@ -159,6 +162,35 @@
           })}
         </section>
 
+        <section class="grid grid-4">
+          ${statCard({
+            label: I18n.t('account.totalBalance'),
+            hint: I18n.t('account.totalBalance.hint'),
+            value: Fmt.formatAmount(Store.totalAccountsBalance(), { absolute: true }),
+            icon: 'bank',
+            tone: 'info'
+          })}
+          ${statCard({
+            label: I18n.t('savings.totalSavings'),
+            hint: I18n.t('savings.totalSavings.hint'),
+            value: Fmt.formatAmount(Store.totalSavingsPrincipal() + Store.totalSavingsInterest(), { absolute: true }),
+            icon: 'vault',
+            tone: 'purple'
+          })}
+          ${statCard({
+            label: I18n.t('savings.totalPrincipal'),
+            value: Fmt.formatAmount(Store.totalSavingsPrincipal(), { absolute: true }),
+            icon: 'piggy-bank',
+            tone: 'primary'
+          })}
+          ${statCard({
+            label: I18n.t('savings.totalInterest'),
+            value: Fmt.formatAmount(Store.totalSavingsInterest(), { absolute: true }),
+            icon: 'percent',
+            tone: 'income'
+          })}
+        </section>
+
         <section class="grid grid-2-1">
           <div class="card">
             <div class="card-header">
@@ -190,6 +222,69 @@
               ${upcoming.length
                 ? upcoming.map(dueRow).join('')
                 : `<div class="empty"><div class="empty-icon" data-icon="check"></div><p data-i18n="dash.upcoming.empty">No upcoming due loans.</p></div>`}
+            </div>
+          </div>
+        </section>
+
+        <section class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title" data-i18n="dash.accounts">${I18n.t('dash.accounts')}</div>
+              </div>
+              <a class="btn btn-ghost btn-sm" href="#/accounts">
+                <span data-i18n="action.viewAll">View all</span>
+                <span data-icon="chevronRight"></span>
+              </a>
+            </div>
+            <div class="list">
+              ${accounts.length ? accounts.slice(0, 5).map((acc) => {
+                const icon = acc.type === 'bank' ? 'bank' : acc.type === 'ewallet' ? 'smartphone' : 'wallet';
+                const tone = acc.type === 'bank' ? 'info' : acc.type === 'ewallet' ? 'purple' : 'income';
+                return `
+                <div class="txn-row">
+                  <span class="circle-icon ${tone}" data-icon="${icon}"></span>
+                  <div>
+                    <div class="txn-title">${acc.name}</div>
+                    <div class="txn-sub"><span>${I18n.t('account.type.' + acc.type)}</span></div>
+                  </div>
+                  <div class="txn-amount" style="color:var(--color-info)">${Fmt.formatAmount(acc.balance)}</div>
+                </div>`;
+              }).join('') : '<div class="empty"><div class="empty-icon" data-icon="bank"></div><p>No accounts</p></div>'}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title" data-i18n="dash.savings">${I18n.t('dash.savings')}</div>
+              </div>
+              <a class="btn btn-ghost btn-sm" href="#/savings">
+                <span data-i18n="action.viewAll">View all</span>
+                <span data-icon="chevronRight"></span>
+              </a>
+            </div>
+            <div class="list">
+              ${activeSavings.length ? activeSavings.slice(0, 5).map((sav) => {
+                const status = Store.savingsStatus(sav);
+                const interest = Store.savingsInterestEarned(sav);
+                const total = Number(sav.principal || 0) + interest;
+                const badgeCls = status === 'matured' ? 'badge-warning' : status === 'withdrawn' ? 'badge-expense' : 'badge-income';
+                const statusKey = 'savings.status.' + status;
+                return `
+                <div class="txn-row">
+                  <span class="circle-icon primary" data-icon="vault"></span>
+                  <div>
+                    <div class="txn-title">${sav.name}</div>
+                    <div class="txn-sub">
+                      <span class="badge ${badgeCls}">${I18n.t(statusKey)}</span>
+                      <span>•</span>
+                      <span>${Number(sav.interestRate).toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <div class="txn-amount text-income">${Fmt.formatAmount(total, { absolute: true })}</div>
+                </div>`;
+              }).join('') : '<div class="empty"><div class="empty-icon" data-icon="vault"></div><p>No savings</p></div>'}
             </div>
           </div>
         </section>

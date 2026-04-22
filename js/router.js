@@ -6,7 +6,7 @@
   'use strict';
 
   const DEFAULT_ROUTE = 'dashboard';
-  const ROUTES = ['dashboard', 'transactions', 'lending', 'borrowing', 'people', 'reports'];
+  const ROUTES = ['dashboard', 'transactions', 'accounts', 'savings', 'lending', 'borrowing', 'people', 'reports'];
 
   const listeners = new Set();
 
