@@ -79,3 +79,5 @@ Every JS file is a self-contained IIFE attached to `window`:
 - ❌ Mutate `state.*` arrays from outside `store.js`.
 - ❌ Call Firestore from a page or form — always go through `Store.*` so the cache + `emit()` stay consistent.
 - ❌ Ship emojis in UI strings / code / commits unless the user explicitly asks.
+- ❌ Write source code (variable names, function names, comments, JSDoc blocks) in any language other than English. Locale values in `locales/*.json` are the only exception.
+- ❌ Leave `CLAUDE.md` or any file under `.claude/rules/` out of date after adding a route, entity, money formula, style rule, data field, or module. Update docs in the same change.

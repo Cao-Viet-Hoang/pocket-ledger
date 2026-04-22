@@ -106,5 +106,7 @@ The full rulebook lives in [.claude/rules/](.claude/rules/). The enforceable hig
 3. **Preserve the IIFE pattern** even for small helper files.
 4. **Don't introduce a build step, bundler, npm dependency, or framework.** This is intentional.
 5. **When in doubt about a money formula**, read `store.js` first — don't reinvent it in a page.
+6. **All code must be written in English** — variable names, function names, comments, JSDoc blocks, inline strings (except locale values in `locales/*.json`). No Vietnamese in source code.
+7. **Keep docs in sync.** Whenever you add a route, entity, money formula, style rule, data field, or module, update `CLAUDE.md` and the relevant file(s) under `.claude/rules/` in the same change so they always reflect the actual codebase.
 
 See [.claude/rules/](.claude/rules/) for the deep-dive rules and [.claude/agents/](.claude/agents/) for task-specific subagents.
