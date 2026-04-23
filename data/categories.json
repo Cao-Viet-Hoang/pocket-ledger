@@ -4,6 +4,7 @@
   { "id": "other_income", "nameKey": "cat.otherIncome", "type": "income", "icon": "arrow-down-left", "tone": "primary" },
   { "id": "food", "nameKey": "cat.food", "type": "expense", "icon": "bowl", "tone": "expense" },
   { "id": "transport", "nameKey": "cat.transport", "type": "expense", "icon": "car", "tone": "info" },
+  { "id": "fuel", "nameKey": "cat.fuel", "type": "expense", "icon": "fuel", "tone": "warning" },
   { "id": "shopping", "nameKey": "cat.shopping", "type": "expense", "icon": "bag", "tone": "purple" },
   { "id": "bills", "nameKey": "cat.bills", "type": "expense", "icon": "receipt", "tone": "warning" },
   { "id": "entertainment", "nameKey": "cat.entertainment", "type": "expense", "icon": "music", "tone": "purple" },

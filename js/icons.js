@@ -55,6 +55,7 @@
     gift: svg('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5c1.7 0 4.5 2 4.5 5"/><path d="M16.5 8a2.5 2.5 0 0 0 0-5c-1.7 0-4.5 2-4.5 5"/>'),
     bowl: svg('<path d="M3 11h18"/><path d="M4 11a8 8 0 0 0 16 0"/><path d="M9 7c.5-1 2-2 3-2"/><path d="M13 7c.5-1 2-2 3-2"/>'),
     car: svg('<path d="M5 17h14l-1.5-6.5A3 3 0 0 0 14.6 8H9.4a3 3 0 0 0-2.9 2.5L5 17Z"/><circle cx="8" cy="18" r="2"/><circle cx="16" cy="18" r="2"/>'),
+    fuel: svg('<path d="M3 22h12"/><path d="M4 9h10"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/>'),
     bag: svg('<path d="M5 8h14l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>'),
     receipt: svg('<path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 7h6"/><path d="M9 11h6"/><path d="M9 15h4"/>'),
     music: svg('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),

@@ -73,7 +73,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="amountValue" autocomplete="off" value="${initial.amount ? Number(initial.amount).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="amountValue" autocomplete="off" value="${initial.amount ? Number(initial.amount).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -245,7 +245,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="loanPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="loanPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -319,7 +319,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="payAmount" autocomplete="off"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="payAmount" autocomplete="off"/>
       </div>
 
       <div class="form-group" style="margin-bottom: var(--space-3)">
@@ -480,7 +480,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="accBalance" autocomplete="off" value="${initial.balance ? Number(initial.balance).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="accBalance" autocomplete="off" value="${initial.balance ? Number(initial.balance).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="form-group">
@@ -548,7 +548,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="savPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="savPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -670,7 +670,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" placeholder="0" id="tfAmount" autocomplete="off"/>
+        <input type="text" inputmode="numeric" placeholder="0" id="tfAmount" autocomplete="off"/>
       </div>
 
       <div class="form-group" style="margin-bottom: var(--space-3)">

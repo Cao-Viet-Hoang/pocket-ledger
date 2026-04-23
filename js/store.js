@@ -110,9 +110,16 @@
 
     const tasks = [];
 
+    const categoryDefs = await loadJSON('data/categories.json').catch(() => []);
     if (cats.length === 0) {
-      const categories = await loadJSON('data/categories.json');
-      for (const c of categories) tasks.push(FirebaseClient.setItem('categories', c.id, c));
+      for (const c of categoryDefs) tasks.push(FirebaseClient.setItem('categories', c.id, c));
+    } else {
+      // Upsert any categories added to the JSON since this user first seeded,
+      // so existing users pick up new built-in categories without re-seeding.
+      const existingIds = new Set(cats.map((c) => c.id));
+      for (const c of categoryDefs) {
+        if (!existingIds.has(c.id)) tasks.push(FirebaseClient.setItem('categories', c.id, c));
+      }
     }
 
     if (!meta || !meta.settings) {
