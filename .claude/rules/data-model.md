@@ -65,6 +65,7 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   "id": "l-001",
   "personId": "p-001",
   "principal": 5000000,
+  "accountId": "acc-vcb",
   "startDate": "2026-02-15",
   "dueDate": "2026-05-15",
   "note": "…",
@@ -75,15 +76,23 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 ```
 - `payments` is a Firestore array field, mutated via `FirebaseClient.arrayUnion` / `arrayRemove`.
 - Payment id prefixes: `lp-` for lending, `bp-` for borrowing.
+- The loan's `accountId` is the source of the principal: lending subtracts the
+  principal from that account on create; borrowing adds it. Nullable — `null`
+  means the principal came from / went to free-floating cash, reflected via
+  `cashBalance`. Independent of each payment's own `accountId`.
 - Each payment's `accountId` is nullable. When set, the payment mutates that
   account's `balance` (lending `+=`, borrowing `−=`). When `null`, the payment
   is a cash entry and contributes to `cashBalance` instead. A missing
-  `accountId` field on stored records is treated as `null` (backward-compatible
-  with pre-coupling data).
+  `accountId` field on a loan or payment stored record is treated as `null`
+  (backward-compatible with pre-coupling data).
 - **Invariants**:
   - `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
-  - `addLoanPayment` applies the account delta on create; `removeLoanPayment`
-    rolls it back; `deleteLoan` unwinds every payment's delta before deleting.
+  - `addLoan` applies the principal delta on create (lending `−=`, borrowing
+    `+=`). `updateLoan` rolls back the prior delta and applies the new one when
+    `principal` or `accountId` changes. `deleteLoan` refunds/returns the
+    principal and also unwinds every payment's delta.
+  - `addLoanPayment` applies the payment delta on create; `removeLoanPayment`
+    rolls it back.
 
 ### `accounts`
 ```json

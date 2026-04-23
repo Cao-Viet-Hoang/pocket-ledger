@@ -11,7 +11,7 @@ Single source of truth for every amount shown in the UI. **Always consult this f
 | `totalPaid(loan)` | `Σ loan.payments[i].amount` | Works for lending and borrowing. |
 | `loanRemaining(loan)` | `max(0, loan.principal − totalPaid(loan))` | Never negative. |
 | `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types. |
-| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment` | Free-floating cash. Includes savings, transfer, and loan-payment adjustments — see below. |
+| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment + cashLoanPrincipalAdjustment` | Free-floating cash. Includes savings, transfer, loan-payment, and loan-principal adjustments — see below. |
 | `currentBalance()` | `totalAccountsBalance() + cashBalance()` | Spendable money (accounts + cash). Hero number on dashboard. |
 | `totalReceivable()` | `Σ loanRemaining(l)` over lending | |
 | `totalPayable()` | `Σ loanRemaining(b)` over borrowing | |
@@ -63,11 +63,15 @@ cashTransferAdjustment = Σ amount  (fromAccountId!=null AND toAccountId==null) 
 cashLoanPaymentAdjustment = Σ payment.amount  (loan in lending  AND payment.accountId==null)   // received in cash
                           − Σ payment.amount  (loan in borrowing AND payment.accountId==null); // paid in cash
 
+cashLoanPrincipalAdjustment = Σ loan.principal  (loan in borrowing AND loan.accountId==null)   // borrowed in cash
+                            − Σ loan.principal  (loan in lending   AND loan.accountId==null); // lent in cash
+
 cashBalance    = openingBalance
                + Σ income(accountId==null) − Σ expense(accountId==null)
                + cashSavingsAdjustment
                + cashTransferAdjustment
-               + cashLoanPaymentAdjustment;
+               + cashLoanPaymentAdjustment
+               + cashLoanPrincipalAdjustment;
 
 currentBalance = totalAccountsBalance() + cashBalance;
 ```
@@ -78,19 +82,23 @@ Two disjoint buckets feed the hero:
   `updateTransaction` / `deleteTransaction` whenever `accountId` is set, by
   transfers (when both sides are accounts, or on the account side of an
   account↔cash transfer), by savings side-effects (when savings has an
-  `accountId`), and by loan payments (when `payment.accountId` is set — lending
-  `+=`, borrowing `−=`).
+  `accountId`), by loan principals (when `loan.accountId` is set — lending
+  `−=` principal, borrowing `+=` principal), and by loan payments (when
+  `payment.accountId` is set — lending `+=`, borrowing `−=`).
 - **Cash** — money outside any tracked account. Seeded by `openingBalance`,
   adjusted by every transaction whose `accountId` is `null`, adjusted by
   cash-funded savings (active/matured principal locks out of cash; withdrawn
   deposits credit their `finalInterest` back), adjusted by transfers that
   cross the account ↔ cash boundary (account→cash adds, cash→account subtracts),
-  and adjusted by cash-settled loan payments (lending payment adds, borrowing
-  payment subtracts).
+  adjusted by cash-settled loan payments (lending payment adds, borrowing
+  payment subtracts), and adjusted by cash-sourced loan principals (cash
+  lending subtracts, cash borrowing adds).
 
-A stored transaction / savings / transfer / loan-payment without an
-`accountId` field (or where the transfer side is `null`) is treated as cash so
-pre-coupling data keeps working without migration.
+A stored transaction / savings / transfer / loan / loan-payment without an
+`accountId` field (or where the transfer side is `null`) is treated as cash
+so pre-coupling data keeps working without migration — which retroactively
+corrects net worth: previously the principal sat in both `currentBalance`
+(untouched) and `totalReceivable`/`totalPayable`, double-counting wealth.
 
 ### Transaction ↔ account coupling
 
@@ -103,13 +111,24 @@ pre-coupling data keeps working without migration.
 Helper: `txnAccountDelta(txn)` returns the signed amount a txn contributes to its
 linked account (`0` when unlinked), so the mutations stay symmetric.
 
+### Loan principal ↔ account coupling
+
+| Mutation | Side-effect on accounts |
+|---|---|
+| `addLoan(kind, data)` | If `data.accountId`, `account.balance += (kind==='lending' ? −principal : +principal)` |
+| `updateLoan(kind, id, patch)` | Rollback prior principal delta on old account, apply new on new account. Handles `accountId` swaps, `principal` changes, and `null ↔ acc-*` transitions. |
+| `deleteLoan(kind, id)` | Undo the principal delta (refund lending, repay borrowing) **and** unwind every payment's own delta. |
+
+Helper: `loanAccountDelta(kind, loan)` returns the signed amount a loan's
+principal contributes to its linked account (`0` when unlinked); lending
+subtracts (money went out), borrowing adds (money came in).
+
 ### Loan payment ↔ account coupling
 
 | Mutation | Side-effect on accounts |
 |---|---|
 | `addLoanPayment(kind, loanId, p)` | If `p.accountId`, `account.balance += (kind==='lending' ? +amount : −amount)` |
 | `removeLoanPayment(kind, loanId, p)` | If `p.accountId`, undo its delta. |
-| `deleteLoan(kind, id)` | Unwind every payment's delta on its linked account before deleting the loan. |
 
 Helper: `paymentAccountDelta(kind, payment)` returns the signed amount a payment
 contributes to its linked account (`0` when unlinked); lending adds, borrowing
@@ -129,6 +148,11 @@ netWorth = currentBalance()                                        // accounts +
   savings, or the `cashBalance` sum for cash-funded ones. Adding principal back
   via `Σ non-withdrawn savings.principal` then correctly reclassifies it as
   "locked wealth" instead of "spendable balance".
+- Loans are handled symmetrically: lending subtracts the principal from its
+  source (account or cash) on create, borrowing adds it. `totalReceivable` /
+  `totalPayable` then represent the IOU value on top of the already-adjusted
+  `currentBalance`, so netWorth stays invariant across the full loan lifecycle
+  (lend → receive payments → fully paid).
 - Interest in `netWorth` is **projected at maturity** (same formula as the savings card / hero) — forward-looking wealth on the assumption the deposit is held to term.
 - Cash portion of `currentBalance` is included so untagged transactions and
   cash-funded savings still count.

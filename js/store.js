@@ -247,6 +247,15 @@
     return kind === 'lending' ? amount : -amount;
   }
 
+  // Signed delta that a loan's principal contributes to its linked account's balance:
+  // lending = money given out (-principal), borrowing = money received (+principal).
+  // Returns 0 if unlinked.
+  function loanAccountDelta(kind, loan) {
+    if (!loan || !loan.accountId) return 0;
+    const principal = Number(loan.principal || 0);
+    return kind === 'lending' ? -principal : principal;
+  }
+
   async function applyAccountDelta(accountId, delta) {
     if (!accountId || !delta) return;
     const acc = state.accounts.find((a) => a.id === accountId);
@@ -323,30 +332,50 @@
   async function addLoan(kind, data) {
     if (kind !== 'lending' && kind !== 'borrowing') throw new Error('Invalid kind: ' + kind);
     const id = data.id || genId(kind === 'lending' ? 'l' : 'b');
-    const rec = Object.assign({ note: '', payments: [] }, data, { id });
+    const rec = Object.assign({ note: '', payments: [], accountId: null }, data, { id });
+    if (!rec.accountId) rec.accountId = null;
     await FirebaseClient.setItem(kind, id, rec);
     state[kind].push(rec);
+    // Principal leaves (lending) or enters (borrowing) the source account/cash
+    // so the money-in/money-out invariant holds.
+    await applyAccountDelta(rec.accountId, loanAccountDelta(kind, rec));
     emit();
     return rec;
   }
 
   async function updateLoan(kind, id, data) {
+    const prev = state[kind].find((l) => l.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
     await FirebaseClient.updateItem(kind, id, patch);
     const i = state[kind].findIndex((l) => l.id === id);
     if (i >= 0) state[kind][i] = Object.assign({}, state[kind][i], patch);
+    // Rebalance when principal or accountId changed — rollback prior principal
+    // effect on the old source, apply the new one. Payment-level deltas are
+    // unaffected since payments own their own accountId.
+    if (prev) {
+      const next = state[kind][i];
+      const prevPrincipal = Number(prev.principal || 0);
+      const nextPrincipal = Number(next.principal || 0);
+      if (prev.accountId !== next.accountId || prevPrincipal !== nextPrincipal) {
+        await applyAccountDelta(prev.accountId, -loanAccountDelta(kind, prev));
+        await applyAccountDelta(next.accountId, loanAccountDelta(kind, next));
+      }
+    }
     emit();
   }
 
   async function deleteLoan(kind, id) {
     const loan = state[kind].find((l) => l.id === id);
-    // Unwind every linked payment's account effect before deleting — symmetric
-    // with removeLoanPayment so balances stay consistent.
+    // Unwind every linked payment's account effect, then refund/return the
+    // principal itself — symmetric with addLoan + addLoanPayment so balances
+    // end up as if the loan had never been created.
     if (loan) {
       for (const p of (loan.payments || [])) {
         await applyAccountDelta(p.accountId, -paymentAccountDelta(kind, p));
       }
+      await applyAccountDelta(loan.accountId, -loanAccountDelta(kind, loan));
     }
     await FirebaseClient.deleteItem(kind, id);
     state[kind] = state[kind].filter((l) => l.id !== id);
@@ -635,17 +664,19 @@
 
   // Cash not held in any tracked account: opening balance + signed sum of
   // transactions with accountId == null, adjusted for savings funded from cash,
-  // transfers that cross the account ↔ cash boundary, and loan payments
-  // received/paid in cash.
+  // transfers that cross the account ↔ cash boundary, loan payments
+  // received/paid in cash, and loan principals sourced from cash.
   // Active/matured cash savings subtract their principal (money locked away);
   // withdrawn cash savings add back their finalInterest (the earnings credited
   // to cash on payout — the principal returns implicitly as the subtraction
   // term drops out). Transfers with toAccountId==null moved money INTO cash;
   // fromAccountId==null moved money OUT of cash. Lending payments with
   // accountId==null add cash (someone paid us back in cash); borrowing payments
-  // with accountId==null subtract cash (we paid someone back in cash).
-  // Transactions/savings/transfers/payments wholly inside tracked accounts are
-  // already reflected in totalAccountsBalance() and are excluded here.
+  // with accountId==null subtract cash (we paid someone back in cash). Cash-
+  // sourced lending subtracts the principal (cash given out); cash-sourced
+  // borrowing adds the principal (cash received). Transactions/savings/
+  // transfers/payments/loans wholly inside tracked accounts are already
+  // reflected in totalAccountsBalance() and are excluded here.
   function cashBalance() {
     const unlinked = state.transactions.filter((t) => !t.accountId);
     const opening = Number(state.settings.openingBalance || 0);
@@ -668,8 +699,14 @@
     }, 0);
     const loanPaymentAdjustment =
       sumUnlinkedPayments(state.lending) - sumUnlinkedPayments(state.borrowing);
+    const sumUnlinkedPrincipals = (loans) => loans
+      .filter((l) => !l.accountId)
+      .reduce((sum, l) => sum + Number(l.principal || 0), 0);
+    const loanPrincipalAdjustment =
+      sumUnlinkedPrincipals(state.borrowing) - sumUnlinkedPrincipals(state.lending);
     return opening + totalIncome(unlinked) - totalExpense(unlinked)
-      + savingsAdjustment + transferAdjustment + loanPaymentAdjustment;
+      + savingsAdjustment + transferAdjustment
+      + loanPaymentAdjustment + loanPrincipalAdjustment;
   }
 
   function currentBalance() {

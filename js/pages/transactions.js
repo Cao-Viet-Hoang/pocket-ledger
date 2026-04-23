@@ -83,10 +83,15 @@
     list.sort((a, b) => {
       const da = Fmt.parseDate(a.date).getTime();
       const db = Fmt.parseDate(b.date).getTime();
-      if (filterState.sort === 'dateAsc') return da - db;
-      if (filterState.sort === 'dateDesc') return db - da;
-      if (filterState.sort === 'amountAsc') return a.amount - b.amount;
-      if (filterState.sort === 'amountDesc') return b.amount - a.amount;
+      // Same-day tiebreaker: id encodes a base36 timestamp, so `id` desc puts
+      // the most recently created record first. Matches the sort direction so
+      // the order is monotonic end-to-end.
+      const idAsc = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      const idDesc = -idAsc;
+      if (filterState.sort === 'dateAsc') return (da - db) || idAsc;
+      if (filterState.sort === 'dateDesc') return (db - da) || idDesc;
+      if (filterState.sort === 'amountAsc') return (a.amount - b.amount) || (db - da) || idDesc;
+      if (filterState.sort === 'amountDesc') return (b.amount - a.amount) || (db - da) || idDesc;
       return 0;
     });
 

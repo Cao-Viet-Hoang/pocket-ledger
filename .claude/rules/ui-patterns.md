@@ -9,7 +9,7 @@ Reusable shapes. When you add a new page, prefer composing these over introducin
  * Short description of this page.
  */
 (function (global) {
-  'use strict';
+  "use strict";
 
   function render(container) {
     container.innerHTML = `
@@ -109,11 +109,18 @@ Money inputs use:
 ```html
 <div class="amount-input">
   <span class="currency">${Store.currency.symbol}</span>
-  <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="…" autocomplete="off"/>
+  <input
+    type="text"
+    inputmode="numeric"
+    pattern="[0-9]*"
+    placeholder="0"
+    id="…"
+    autocomplete="off"
+  />
 </div>
 ```
 
-Then call `wireAmountInput(input)` inside `forms.js` (it's not exported — keep it local). The handler formats on every keystroke using `toLocaleString('en-US')` and strips non-digits.
+Then call `wireAmountInput(input)` inside `forms.js` (it's not exported — keep it local). The handler formats on every keystroke using `toLocaleString('en-US')` and strips non-digits. It also auto-injects a `.amount-quick` row of `000` / `000,000` chips below the `.amount-input` wrapper — tap a chip to append that many zeros to the current value. Idempotent across re-renders.
 
 `inputmode` + `pattern` together trigger the mobile numpad on every browser we care about (`inputmode` handles modern Android/iOS, `pattern="[0-9]*"` covers iOS Safari < 12). For other numeric fields pick the closest `inputmode` value: `tel` for phone numbers, `decimal` for rates / non-integer amounts, `numeric` for integer-only fields.
 
@@ -121,11 +128,11 @@ Then call `wireAmountInput(input)` inside `forms.js` (it's not exported — keep
 
 ```js
 Forms.confirm({
-  title: I18n.t('action.delete.foo'),
-  message: I18n.t('confirm.deleteFoo'),
-  confirmLabel: I18n.t('action.delete'),
-  variant: 'danger',
-  onConfirm: () => Store.deleteFoo(id)
+  title: I18n.t("action.delete.foo"),
+  message: I18n.t("confirm.deleteFoo"),
+  confirmLabel: I18n.t("action.delete"),
+  variant: "danger",
+  onConfirm: () => Store.deleteFoo(id),
 });
 ```
 
@@ -134,7 +141,7 @@ Use for every destructive action. Don't prompt with `window.confirm`.
 ## Toasts
 
 ```js
-Toast.show(I18n.t('toast.saved'));
+Toast.show(I18n.t("toast.saved"));
 ```
 
 Two keys cover almost every case: `toast.saved` and `toast.deleted`. Add a new one only if neither fits.

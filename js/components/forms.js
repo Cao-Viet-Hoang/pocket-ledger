@@ -20,6 +20,28 @@
       const num = parseAmountInput(input.value);
       input.value = num ? num.toLocaleString('en-US') : '';
     });
+
+    // Mobile shortcut: append common VND zero groups with one tap.
+    const wrap = input.closest('.amount-input');
+    if (!wrap) return;
+    const existing = wrap.nextElementSibling;
+    if (existing && existing.classList.contains('amount-quick')) return;
+    const quick = document.createElement('div');
+    quick.className = 'amount-quick';
+    quick.innerHTML = `
+      <button type="button" class="chip" data-append="000">000</button>
+      <button type="button" class="chip" data-append="000000">000,000</button>
+    `;
+    wrap.insertAdjacentElement('afterend', quick);
+    quick.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-append]');
+      if (!btn) return;
+      const num = parseAmountInput(input.value);
+      if (!num) return;
+      const next = Number(String(num) + btn.dataset.append);
+      input.value = next.toLocaleString('en-US');
+      input.focus();
+    });
   }
 
   function todayISO() {
@@ -219,10 +241,12 @@
 
   function loanForm(kind, existing) {
     const people = Store.getPeople();
+    const accounts = Store.getAccounts();
     const isEdit = Boolean(existing);
     const initial = existing || {
       personId: people[0] ? people[0].id : '',
       principal: 0,
+      accountId: null,
       startDate: todayISO(),
       dueDate: todayISO(),
       note: ''
@@ -238,9 +262,15 @@
       : (isEdit ? 'action.edit.debt' : 'action.add.debt');
 
     const bodyHTML = `
-      <div class="form-group" style="margin-bottom: var(--space-3)">
-        <label class="form-label">${I18n.t('txn.person')}</label>
-        <select class="select" id="loanPerson">${peopleOptionsHTML(people, { includeBlank: false })}</select>
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.person')}</label>
+          <select class="select" id="loanPerson">${peopleOptionsHTML(people, { includeBlank: false })}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.account')}</label>
+          <select class="select" id="loanAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+        </div>
       </div>
 
       <div class="amount-input">
@@ -277,6 +307,7 @@
           onClick: async () => {
             const root = document.getElementById('modalRoot');
             const personId = root.querySelector('#loanPerson').value;
+            const accountId = root.querySelector('#loanAccount').value || null;
             const principal = parseAmountInput(root.querySelector('#loanPrincipal').value);
             const startDate = root.querySelector('#loanStart').value;
             const dueDate = root.querySelector('#loanDue').value;
@@ -288,9 +319,9 @@
 
             try {
               if (isEdit) {
-                await Store.updateLoan(kind, existing.id, { personId, principal, startDate, dueDate, note });
+                await Store.updateLoan(kind, existing.id, { personId, accountId, principal, startDate, dueDate, note });
               } else {
-                await Store.addLoan(kind, { personId, principal, startDate, dueDate, note, payments: [] });
+                await Store.addLoan(kind, { personId, accountId, principal, startDate, dueDate, note, payments: [] });
               }
               Modal.close();
               Toast.show(I18n.t('toast.saved'));
@@ -305,6 +336,7 @@
 
     const root = document.getElementById('modalRoot');
     root.querySelector('#loanPerson').value = initial.personId || '';
+    if (initial.accountId) root.querySelector('#loanAccount').value = initial.accountId;
     wireAmountInput(root.querySelector('#loanPrincipal'));
   }
 
