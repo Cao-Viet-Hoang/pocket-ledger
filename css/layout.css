@@ -2,7 +2,6 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
-  overflow-x: hidden;
 }
 
 /* ===== Sidebar ===== */
