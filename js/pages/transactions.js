@@ -83,15 +83,17 @@
     list.sort((a, b) => {
       const da = Fmt.parseDate(a.date).getTime();
       const db = Fmt.parseDate(b.date).getTime();
-      // Same-day tiebreaker: id encodes a base36 timestamp, so `id` desc puts
-      // the most recently created record first. Matches the sort direction so
-      // the order is monotonic end-to-end.
-      const idAsc = a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-      const idDesc = -idAsc;
-      if (filterState.sort === 'dateAsc') return (da - db) || idAsc;
-      if (filterState.sort === 'dateDesc') return (db - da) || idDesc;
-      if (filterState.sort === 'amountAsc') return (a.amount - b.amount) || (db - da) || idDesc;
-      if (filterState.sort === 'amountDesc') return (b.amount - a.amount) || (db - da) || idDesc;
+      // Same-day tiebreaker: `createdAt` is an ISO timestamp stamped on add
+      // (and backfilled on legacy records). Compare as strings — ISO strings
+      // sort chronologically. Fallback to id for defensive safety.
+      const ca = a.createdAt || a.id || '';
+      const cb = b.createdAt || b.id || '';
+      const createdAsc = ca < cb ? -1 : ca > cb ? 1 : 0;
+      const createdDesc = -createdAsc;
+      if (filterState.sort === 'dateAsc') return (da - db) || createdAsc;
+      if (filterState.sort === 'dateDesc') return (db - da) || createdDesc;
+      if (filterState.sort === 'amountAsc') return (a.amount - b.amount) || (db - da) || createdDesc;
+      if (filterState.sort === 'amountDesc') return (b.amount - a.amount) || (db - da) || createdDesc;
       return 0;
     });
 

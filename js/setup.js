@@ -92,11 +92,6 @@
         <small class="text-muted" style="font-size: var(--fs-xs)">${I18n.t('setup.configHint')}</small>
       </div>
 
-      <label class="form-group" style="flex-direction: row; align-items: center; gap: var(--space-2); margin-top: var(--space-3)">
-        <input type="checkbox" id="fbSeed"/>
-        <span>${I18n.t('setup.seedSample')}</span>
-      </label>
-
       <div id="setupError" class="text-expense" style="font-size: var(--fs-sm); margin-top: var(--space-3); display:none"></div>
     `;
   }
@@ -105,8 +100,7 @@
     const root = document.getElementById('modalRoot');
     const username = root.querySelector('#setupUsername').value.trim();
     const configText = root.querySelector('#setupConfig').value;
-    const seed = root.querySelector('#fbSeed').checked;
-    return { username, configText, seed };
+    return { username, configText };
   }
 
   function showError(message) {
@@ -157,7 +151,7 @@
           keepOpen: true,
           onClick: async (ev) => {
             const btn = ev.currentTarget;
-            const { username, configText, seed } = readValues();
+            const { username, configText } = readValues();
 
             if (!username) { showError(I18n.t('setup.errUsername')); return; }
 
@@ -176,7 +170,7 @@
             try {
               showError('');
               setConnecting(btn, true);
-              await Store.configure({ config, username, seedSample: seed });
+              await Store.configure({ config, username });
               Modal.close();
               Toast.show(I18n.t('setup.connected'));
               if (typeof onDone === 'function') onDone();

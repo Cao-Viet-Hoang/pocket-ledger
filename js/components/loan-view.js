@@ -218,7 +218,13 @@
     const remaining = Math.max(0, loan.principal - paid);
     const status = Store.loanStatus(loan);
     const badge = STATUS_BADGE[status] || STATUS_BADGE.unpaid;
-    const payments = (loan.payments || []).slice().sort((a, b) => Fmt.parseDate(b.date) - Fmt.parseDate(a.date));
+    const payments = (loan.payments || []).slice().sort((a, b) => {
+      const byDate = Fmt.parseDate(b.date) - Fmt.parseDate(a.date);
+      if (byDate) return byDate;
+      const ca = a.createdAt || a.id || '';
+      const cb = b.createdAt || b.id || '';
+      return ca < cb ? 1 : ca > cb ? -1 : 0;
+    });
 
     const historyHTML = payments.length
       ? payments.map((p) => `

@@ -68,7 +68,6 @@
   "setup.config": "Cấu hình Firebase",
   "setup.configHint": "Dán object cấu hình mà Firebase hiển thị trong project settings. Nhận cả JSON lẫn JS object literal.",
   "setup.errConfig": "Cấu hình không hợp lệ — cần là JSON / JS object",
-  "setup.seedSample": "Nạp dữ liệu mẫu khi kết nối lần đầu",
   "setup.connect": "Kết nối",
   "setup.connecting": "Đang kết nối…",
   "setup.connected": "Đã kết nối Firebase",

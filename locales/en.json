@@ -68,7 +68,6 @@
   "setup.config": "Firebase config",
   "setup.configHint": "Paste the config object Firebase shows in your project settings. JSON or JS object literal both work.",
   "setup.errConfig": "Invalid config — expected a JSON / JS object",
-  "setup.seedSample": "Load sample data on first connect",
   "setup.connect": "Connect",
   "setup.connecting": "Connecting…",
   "setup.connected": "Connected to Firebase",

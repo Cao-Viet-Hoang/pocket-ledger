@@ -3,7 +3,7 @@
  *
  * Lifecycle:
  *   1. `getStoredCredentials()`  — returns cached { config, username } from localStorage
- *   2. `configure({config, username, seedSample})` — init Firebase, seed if empty, fetch all
+ *   2. `configure({config, username})` — init Firebase, seed defaults if empty, fetch all, backfill timestamps
  *   3. `disconnect()`            — clear credentials and reset state
  *
  * Mutations push to Firestore and update local cache, then emit change events.
@@ -103,19 +103,20 @@
     return res.json();
   }
 
-  async function seedIfEmpty({ seedSample }) {
-    // Categories are always required for the app to function.
+  async function seedDefaults() {
+    // Categories + settings are the only baked-in defaults. Everything else
+    // (accounts, people, transactions, loans, savings, transfers) is created
+    // by the user through the app.
     const cats = await FirebaseClient.getAll('categories');
     const meta = await FirebaseClient.getUserMeta();
-
     const tasks = [];
 
-    const categoryDefs = await loadJSON('data/categories.json').catch(() => []);
+    const categoryDefs = await loadJSON('defaults/categories.json').catch(() => []);
     if (cats.length === 0) {
       for (const c of categoryDefs) tasks.push(FirebaseClient.setItem('categories', c.id, c));
     } else {
-      // Upsert any categories added to the JSON since this user first seeded,
-      // so existing users pick up new built-in categories without re-seeding.
+      // Upsert any categories added to the defaults file since this user first
+      // seeded, so existing users pick up new built-in categories without re-seeding.
       const existingIds = new Set(cats.map((c) => c.id));
       for (const c of categoryDefs) {
         if (!existingIds.has(c.id)) tasks.push(FirebaseClient.setItem('categories', c.id, c));
@@ -123,45 +124,8 @@
     }
 
     if (!meta || !meta.settings) {
-      const settings = await loadJSON('data/settings.json').catch(() => DEFAULT_SETTINGS);
+      const settings = await loadJSON('defaults/settings.json').catch(() => DEFAULT_SETTINGS);
       tasks.push(FirebaseClient.setUserMeta({ settings }));
-    }
-
-    if (seedSample) {
-      // Only seed sample tx/people/loans if these collections are empty.
-      const [people, txns, lending, borrowing, accounts, savings, transfers] = await Promise.all([
-        FirebaseClient.getAll('people'),
-        FirebaseClient.getAll('transactions'),
-        FirebaseClient.getAll('lending'),
-        FirebaseClient.getAll('borrowing'),
-        FirebaseClient.getAll('accounts'),
-        FirebaseClient.getAll('savings'),
-        FirebaseClient.getAll('transfers')
-      ]);
-      if (people.length === 0 && txns.length === 0 && lending.length === 0 && borrowing.length === 0) {
-        const [mockPeople, mockTxns, mockLending, mockBorrowing] = await Promise.all([
-          loadJSON('data/people.json'),
-          loadJSON('data/transactions.json'),
-          loadJSON('data/lending.json'),
-          loadJSON('data/borrowing.json')
-        ]);
-        for (const p of mockPeople) tasks.push(FirebaseClient.setItem('people', p.id, p));
-        for (const t of mockTxns) tasks.push(FirebaseClient.setItem('transactions', t.id, t));
-        for (const l of mockLending) tasks.push(FirebaseClient.setItem('lending', l.id, l));
-        for (const b of mockBorrowing) tasks.push(FirebaseClient.setItem('borrowing', b.id, b));
-      }
-      if (accounts.length === 0) {
-        const mockAccounts = await loadJSON('data/accounts.json').catch(() => []);
-        for (const a of mockAccounts) tasks.push(FirebaseClient.setItem('accounts', a.id, a));
-      }
-      if (savings.length === 0) {
-        const mockSavings = await loadJSON('data/savings.json').catch(() => []);
-        for (const s of mockSavings) tasks.push(FirebaseClient.setItem('savings', s.id, s));
-      }
-      if (transfers.length === 0) {
-        const mockTransfers = await loadJSON('data/transfers.json').catch(() => []);
-        for (const tf of mockTransfers) tasks.push(FirebaseClient.setItem('transfers', tf.id, tf));
-      }
     }
 
     if (tasks.length) {
@@ -194,12 +158,80 @@
     state.loaded = true;
   }
 
-  async function configure({ config, username, seedSample = true }) {
+  // Derive an ISO timestamp from a genId-style id, or fall back to the record's
+  // date at local midnight. Safe no-op for ids that don't fit the pattern.
+  function deriveCreatedAt(id, fallbackDate) {
+    const parts = String(id || '').split('-');
+    if (parts.length === 3) {
+      const ms = parseInt(parts[1], 36);
+      // Sanity-bound: 2020-01-01 ≤ ms < 2100-01-01 — rejects non-timestamp
+      // base36 strings like "001" that happen to parse to a small number.
+      if (!Number.isNaN(ms) && ms >= 1577836800000 && ms < 4102444800000) {
+        return new Date(ms).toISOString();
+      }
+    }
+    if (fallbackDate) {
+      const d = new Date(fallbackDate + 'T00:00:00');
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+    return new Date().toISOString();
+  }
+
+  // One-shot migration: stamp `createdAt` onto any transaction / transfer /
+  // loan / loan-payment that doesn't have one yet. Idempotent — re-running
+  // after a successful run is a no-op because every record already has the
+  // field. Runs automatically after `fetchAll` during `configure`.
+  async function backfillTimestamps() {
+    const tasks = [];
+
+    for (const t of state.transactions) {
+      if (!t.createdAt) {
+        t.createdAt = deriveCreatedAt(t.id, t.date);
+        tasks.push(FirebaseClient.updateItem('transactions', t.id, { createdAt: t.createdAt }));
+      }
+    }
+
+    for (const tf of state.transfers) {
+      if (!tf.createdAt) {
+        tf.createdAt = deriveCreatedAt(tf.id, tf.date);
+        tasks.push(FirebaseClient.updateItem('transfers', tf.id, { createdAt: tf.createdAt }));
+      }
+    }
+
+    for (const kind of ['lending', 'borrowing']) {
+      for (const l of state[kind]) {
+        const patch = {};
+        if (!l.createdAt) {
+          l.createdAt = deriveCreatedAt(l.id, l.startDate);
+          patch.createdAt = l.createdAt;
+        }
+        const payments = l.payments || [];
+        let paymentsChanged = false;
+        const nextPayments = payments.map((p) => {
+          if (p.createdAt) return p;
+          paymentsChanged = true;
+          return Object.assign({}, p, { createdAt: deriveCreatedAt(p.id, p.date) });
+        });
+        if (paymentsChanged) {
+          l.payments = nextPayments;
+          patch.payments = nextPayments;
+        }
+        if (Object.keys(patch).length) {
+          tasks.push(FirebaseClient.updateItem(kind, l.id, patch));
+        }
+      }
+    }
+
+    if (tasks.length) await Promise.all(tasks);
+  }
+
+  async function configure({ config, username }) {
     await FirebaseClient.init(config, username);
     state.config = config;
     state.username = String(username).trim();
-    await seedIfEmpty({ seedSample });
+    await seedDefaults();
     await fetchAll();
+    await backfillTimestamps();
     state.configured = true;
     saveStoredCredentials(config, state.username);
     saveLastUsedCredentials(config, state.username);
@@ -266,7 +298,11 @@
 
   async function addTransaction(data) {
     const id = data.id || genId('t');
-    const rec = Object.assign({ personId: null, accountId: null, note: '' }, data, { id });
+    const rec = Object.assign(
+      { personId: null, accountId: null, note: '', createdAt: new Date().toISOString() },
+      data,
+      { id }
+    );
     if (!rec.accountId) rec.accountId = null;
     await FirebaseClient.setItem('transactions', id, rec);
     state.transactions.push(rec);
@@ -332,7 +368,11 @@
   async function addLoan(kind, data) {
     if (kind !== 'lending' && kind !== 'borrowing') throw new Error('Invalid kind: ' + kind);
     const id = data.id || genId(kind === 'lending' ? 'l' : 'b');
-    const rec = Object.assign({ note: '', payments: [], accountId: null }, data, { id });
+    const rec = Object.assign(
+      { note: '', payments: [], accountId: null, createdAt: new Date().toISOString() },
+      data,
+      { id }
+    );
     if (!rec.accountId) rec.accountId = null;
     await FirebaseClient.setItem(kind, id, rec);
     state[kind].push(rec);
@@ -384,7 +424,10 @@
 
   async function addLoanPayment(kind, loanId, payment) {
     const prefix = kind === 'lending' ? 'lp' : 'bp';
-    const p = Object.assign({ id: genId(prefix), note: '', accountId: null }, payment);
+    const p = Object.assign(
+      { id: genId(prefix), note: '', accountId: null, createdAt: new Date().toISOString() },
+      payment
+    );
     if (!p.accountId) p.accountId = null;
     await FirebaseClient.arrayUnion(kind, loanId, 'payments', [p]);
     const loan = state[kind].find((l) => l.id === loanId);
@@ -527,7 +570,7 @@
 
   async function addTransfer(data) {
     const id = data.id || genId('tf');
-    const rec = Object.assign({ note: '' }, data, { id });
+    const rec = Object.assign({ note: '', createdAt: new Date().toISOString() }, data, { id });
     // Either side may be null — that side represents free-floating cash
     // (reflected via cashBalance's transferAdjustment, not a direct mutation).
     if (!rec.fromAccountId) rec.fromAccountId = null;
@@ -878,7 +921,10 @@
     withdrawSavings,
     deleteSavings,
     addTransfer,
-    deleteTransfer
+    deleteTransfer,
+
+    // Migration — safe to re-run; only writes records that still lack createdAt.
+    backfillTimestamps
   };
 
   global.Store = Store;

@@ -98,7 +98,13 @@
 
     const recentTxns = Store.getTransactions()
       .slice()
-      .sort((a, b) => (Fmt.parseDate(b.date) - Fmt.parseDate(a.date)) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+      .sort((a, b) => {
+        const byDate = Fmt.parseDate(b.date) - Fmt.parseDate(a.date);
+        if (byDate) return byDate;
+        const ca = a.createdAt || a.id || '';
+        const cb = b.createdAt || b.id || '';
+        return ca < cb ? 1 : ca > cb ? -1 : 0;
+      })
       .slice(0, 6);
 
     const upcoming = Store.upcomingDueLoans(14).slice(0, 5);

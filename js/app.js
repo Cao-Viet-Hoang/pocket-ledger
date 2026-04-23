@@ -53,7 +53,7 @@
     if (stored) {
       showLoading();
       try {
-        await Store.configure({ config: stored.config, username: stored.username, seedSample: false });
+        await Store.configure({ config: stored.config, username: stored.username });
       } catch (err) {
         console.error('Auto-connect failed', err);
         showSetup(err.message);

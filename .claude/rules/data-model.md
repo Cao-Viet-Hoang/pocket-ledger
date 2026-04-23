@@ -22,6 +22,8 @@ Meta doc shape: `{ settings: { currency, openingBalance, defaultLanguage }, seed
 
 All collections are mirrored into `state.*` in `store.js` on load; mutations write both Firestore and the local cache, then `emit()`.
 
+**`createdAt` invariant**: every transaction / transfer / loan / loan-payment carries a `createdAt` ISO timestamp stamped by the `add*` mutation. It's the canonical same-day tiebreaker used by list pages. On connect, `Store.backfillTimestamps()` runs after `fetchAll` and stamps any legacy record missing the field — deriving the value from the id's embedded base36 timestamp when possible, otherwise falling back to the record's `date` / `startDate` at local midnight. Idempotent.
+
 ## Entity schemas
 
 ### `categories`
@@ -31,7 +33,7 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 - `type`: `'income' | 'expense'`
 - `tone`: one of `income | expense | warning | info | primary | purple`
 - `nameKey` must exist in **both** locale files
-- Seeded from `data/categories.json` if empty on connect; required for the app to function
+- Seeded from `defaults/categories.json` if empty on connect; required for the app to function
 
 ### `people`
 ```json
@@ -42,8 +44,9 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 
 ### `transactions`
 ```json
-{ "id": "t-001", "type": "income", "amount": 25000000, "category": "salary",
-  "date": "2026-04-01", "personId": null, "accountId": "acc-vcb", "note": "…" }
+{ "id": "t-…", "type": "income", "amount": 25000000, "category": "salary",
+  "date": "2026-04-01", "personId": null, "accountId": "acc-vcb", "note": "…",
+  "createdAt": "2026-04-01T09:12:34.567Z" }
 ```
 - `type`: `'income' | 'expense'`
 - `amount`: positive integer (sign comes from `type`)
@@ -52,6 +55,9 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 - `accountId`: nullable. When set, the transaction mutates `accounts[accountId].balance`
   (income `+=`, expense `−=`). When `null`, the transaction is treated as free-floating
   cash and contributes to `cashBalance` instead — see money-calculations.md.
+- `createdAt`: ISO timestamp stamped by `addTransaction`. Used as the same-day
+  tiebreaker when listing transactions so the most recently created appears
+  first. Legacy records without this field get it backfilled on connect.
 - **Invariants**:
   - `addTransaction` applies the account delta on create; `updateTransaction` rolls back
     the previous delta and applies the new one (handling `accountId` / `amount` / `type`
@@ -62,20 +68,25 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 ### `lending` / `borrowing`
 ```json
 {
-  "id": "l-001",
-  "personId": "p-001",
+  "id": "l-…",
+  "personId": "p-…",
   "principal": 5000000,
   "accountId": "acc-vcb",
   "startDate": "2026-02-15",
   "dueDate": "2026-05-15",
   "note": "…",
+  "createdAt": "2026-02-15T09:12:34.567Z",
   "payments": [
-    { "id": "lp-001", "date": "yyyy-mm-dd", "amount": 1000000, "accountId": "acc-vcb", "note": "…" }
+    { "id": "lp-…", "date": "yyyy-mm-dd", "amount": 1000000, "accountId": "acc-vcb",
+      "note": "…", "createdAt": "2026-03-01T10:00:00.000Z" }
   ]
 }
 ```
 - `payments` is a Firestore array field, mutated via `FirebaseClient.arrayUnion` / `arrayRemove`.
 - Payment id prefixes: `lp-` for lending, `bp-` for borrowing.
+- Both the loan and each payment carry a `createdAt` ISO timestamp stamped at
+  creation time. Used as the same-day tiebreaker in the payment-history list.
+  Legacy records get the field backfilled on connect.
 - The loan's `accountId` is the source of the principal: lending subtracts the
   principal from that account on create; borrowing adds it. Nullable — `null`
   means the principal came from / went to free-floating cash, reflected via
@@ -142,8 +153,9 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 
 ### `transfers`
 ```json
-{ "id": "tf-001", "fromAccountId": "acc-vcb", "toAccountId": "acc-cash",
-  "amount": 3000000, "date": "yyyy-mm-dd", "note": "…" }
+{ "id": "tf-…", "fromAccountId": "acc-vcb", "toAccountId": "acc-cash",
+  "amount": 3000000, "date": "yyyy-mm-dd", "note": "…",
+  "createdAt": "2026-04-23T09:12:34.567Z" }
 ```
 - `fromAccountId` / `toAccountId` are nullable. A `null` side represents
   free-floating cash (the `cashBalance` bucket). Allowed shapes:

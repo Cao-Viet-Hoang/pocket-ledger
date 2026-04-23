@@ -37,7 +37,7 @@ js/
   pages/
     dashboard.js transactions.js accounts.js savings.js
     lending.js borrowing.js people.js reports.js
-data/               Mock data (seeded to Firestore on first connect)
+defaults/           Built-in defaults seeded to Firestore on first connect (categories + settings only)
 locales/            en.json + vi.json
 ```
 
@@ -56,14 +56,14 @@ Stored per user at `ledgers/{username}/<collection>/{id}`:
 
 - `categories` — `{ id, nameKey, type: 'income'|'expense', icon, tone }`
 - `people` — `{ id, name, phone, note, color: 1..6, createdAt }`
-- `transactions` — `{ id, type, amount, category, date, personId, accountId, note }` (`accountId` is optional; when set, the transaction mutates that account's balance. `null` = cash, no account effect)
-- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, payments: [{ id, date, amount, accountId, note }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent. `null` on either = cash, feeds `cashBalance`)
+- `transactions` — `{ id, type, amount, category, date, personId, accountId, note, createdAt }` (`accountId` is optional; when set, the transaction mutates that account's balance. `null` = cash, no account effect)
+- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent. `null` on either = cash, feeds `cashBalance`)
 - `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`
 - `savings` — `{ id, name, accountId, principal, interestRate, termMonths, startDate, maturityDate, status, withdrawals, note, createdAt, withdrawnAt?, finalAmount?, finalInterest? }`
-- `transfers` — `{ id, fromAccountId, toAccountId, amount, date, note }`
+- `transfers` — `{ id, fromAccountId, toAccountId, amount, date, note, createdAt }`
 - User-meta doc — `{ settings: { currency, openingBalance, defaultLanguage }, seededAt }`
 
-Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.parseDate`. Money is stored as **integers** (VND has 0 decimals).
+Dates (`date`, `startDate`, `dueDate`, `maturityDate`) are **`yyyy-mm-dd` strings** parsed as local time via `Fmt.parseDate`. `createdAt` is a full ISO timestamp (`new Date().toISOString()`) stamped by the `add*` mutations — used as the same-day tiebreaker in lists. `Store.backfillTimestamps()` runs on connect to stamp legacy records that predate this field. Money is stored as **integers** (VND has 0 decimals).
 
 ## Money formulas (see `.claude/rules/money-calculations.md` for full derivations)
 
