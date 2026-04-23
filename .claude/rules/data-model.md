@@ -69,13 +69,21 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   "dueDate": "2026-05-15",
   "note": "…",
   "payments": [
-    { "id": "lp-001", "date": "yyyy-mm-dd", "amount": 1000000, "note": "…" }
+    { "id": "lp-001", "date": "yyyy-mm-dd", "amount": 1000000, "accountId": "acc-vcb", "note": "…" }
   ]
 }
 ```
 - `payments` is a Firestore array field, mutated via `FirebaseClient.arrayUnion` / `arrayRemove`.
 - Payment id prefixes: `lp-` for lending, `bp-` for borrowing.
-- **Invariants**: `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
+- Each payment's `accountId` is nullable. When set, the payment mutates that
+  account's `balance` (lending `+=`, borrowing `−=`). When `null`, the payment
+  is a cash entry and contributes to `cashBalance` instead. A missing
+  `accountId` field on stored records is treated as `null` (backward-compatible
+  with pre-coupling data).
+- **Invariants**:
+  - `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
+  - `addLoanPayment` applies the account delta on create; `removeLoanPayment`
+    rolls it back; `deleteLoan` unwinds every payment's delta before deleting.
 
 ### `accounts`
 ```json
@@ -145,7 +153,7 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 
 1. **Account ↔ savings coupling.** Savings is always linked to an account. Breaking the link (e.g. deleting the account) orphans the savings — the UI tolerates it but the balance math goes slightly wrong. If you add a delete-account flow that touches savings, decide explicitly: cascade, block, or warn.
 2. **Account ↔ transaction coupling.** Transactions may be linked to an account via `accountId`. Tagged transactions mutate the account balance through `Store.addTransaction` / `updateTransaction` / `deleteTransaction`. Untagged (`accountId: null`) transactions are pure cash-journal entries and feed into `cashBalance`. If you add a delete-account flow, decide: cascade-delete tagged transactions, null them out (convert to cash), block the delete, or warn.
-3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app.
+3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app. Payments may be linked to an account via `payment.accountId`; if you add a delete-account flow, decide whether to cascade, null out, block, or warn on linked payments too.
 4. **Categories are global per-user.** Deleting a category orphans any transaction using it (UI shows `—`). No delete-category flow exists yet; if you add one, warn or reassign.
 
 ## Id generation

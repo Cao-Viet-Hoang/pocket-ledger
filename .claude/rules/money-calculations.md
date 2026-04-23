@@ -11,7 +11,7 @@ Single source of truth for every amount shown in the UI. **Always consult this f
 | `totalPaid(loan)` | `Σ loan.payments[i].amount` | Works for lending and borrowing. |
 | `loanRemaining(loan)` | `max(0, loan.principal − totalPaid(loan))` | Never negative. |
 | `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types. |
-| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment` | Free-floating cash. Includes a savings adjustment — see below. |
+| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment` | Free-floating cash. Includes savings, transfer, and loan-payment adjustments — see below. |
 | `currentBalance()` | `totalAccountsBalance() + cashBalance()` | Spendable money (accounts + cash). Hero number on dashboard. |
 | `totalReceivable()` | `Σ loanRemaining(l)` over lending | |
 | `totalPayable()` | `Σ loanRemaining(b)` over borrowing | |
@@ -60,10 +60,14 @@ cashSavingsAdjustment = Σ savings.finalInterest  (accountId==null AND status===
 cashTransferAdjustment = Σ amount  (fromAccountId!=null AND toAccountId==null)   // account → cash
                        − Σ amount  (fromAccountId==null AND toAccountId!=null);  // cash → account
 
+cashLoanPaymentAdjustment = Σ payment.amount  (loan in lending  AND payment.accountId==null)   // received in cash
+                          − Σ payment.amount  (loan in borrowing AND payment.accountId==null); // paid in cash
+
 cashBalance    = openingBalance
                + Σ income(accountId==null) − Σ expense(accountId==null)
                + cashSavingsAdjustment
-               + cashTransferAdjustment;
+               + cashTransferAdjustment
+               + cashLoanPaymentAdjustment;
 
 currentBalance = totalAccountsBalance() + cashBalance;
 ```
@@ -71,19 +75,22 @@ currentBalance = totalAccountsBalance() + cashBalance;
 Two disjoint buckets feed the hero:
 
 - **Accounts** — money inside tracked accounts. Mutated by `addTransaction` /
-  `updateTransaction` / `deleteTransaction` whenever `accountId` is set, plus by
+  `updateTransaction` / `deleteTransaction` whenever `accountId` is set, by
   transfers (when both sides are accounts, or on the account side of an
-  account↔cash transfer) and savings side-effects (when savings has an
-  `accountId`).
+  account↔cash transfer), by savings side-effects (when savings has an
+  `accountId`), and by loan payments (when `payment.accountId` is set — lending
+  `+=`, borrowing `−=`).
 - **Cash** — money outside any tracked account. Seeded by `openingBalance`,
   adjusted by every transaction whose `accountId` is `null`, adjusted by
   cash-funded savings (active/matured principal locks out of cash; withdrawn
-  deposits credit their `finalInterest` back), and adjusted by transfers that
-  cross the account ↔ cash boundary (account→cash adds, cash→account subtracts).
+  deposits credit their `finalInterest` back), adjusted by transfers that
+  cross the account ↔ cash boundary (account→cash adds, cash→account subtracts),
+  and adjusted by cash-settled loan payments (lending payment adds, borrowing
+  payment subtracts).
 
-A stored transaction / savings / transfer without an `accountId` field (or
-where the transfer side is `null`) is treated as cash so pre-coupling data
-keeps working without migration.
+A stored transaction / savings / transfer / loan-payment without an
+`accountId` field (or where the transfer side is `null`) is treated as cash so
+pre-coupling data keeps working without migration.
 
 ### Transaction ↔ account coupling
 
@@ -95,6 +102,18 @@ keeps working without migration.
 
 Helper: `txnAccountDelta(txn)` returns the signed amount a txn contributes to its
 linked account (`0` when unlinked), so the mutations stay symmetric.
+
+### Loan payment ↔ account coupling
+
+| Mutation | Side-effect on accounts |
+|---|---|
+| `addLoanPayment(kind, loanId, p)` | If `p.accountId`, `account.balance += (kind==='lending' ? +amount : −amount)` |
+| `removeLoanPayment(kind, loanId, p)` | If `p.accountId`, undo its delta. |
+| `deleteLoan(kind, id)` | Unwind every payment's delta on its linked account before deleting the loan. |
+
+Helper: `paymentAccountDelta(kind, payment)` returns the signed amount a payment
+contributes to its linked account (`0` when unlinked); lending adds, borrowing
+subtracts.
 
 ## Net worth (dashboard / analytics)
 

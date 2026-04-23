@@ -57,7 +57,7 @@ Stored per user at `ledgers/{username}/<collection>/{id}`:
 - `categories` — `{ id, nameKey, type: 'income'|'expense', icon, tone }`
 - `people` — `{ id, name, phone, note, color: 1..6, createdAt }`
 - `transactions` — `{ id, type, amount, category, date, personId, accountId, note }` (`accountId` is optional; when set, the transaction mutates that account's balance. `null` = cash, no account effect)
-- `lending` / `borrowing` — `{ id, personId, principal, startDate, dueDate, note, payments: [{ id, date, amount, note }] }`
+- `lending` / `borrowing` — `{ id, personId, principal, startDate, dueDate, note, payments: [{ id, date, amount, accountId, note }] }` (each payment's `accountId` is optional — when set, the payment mutates that account's balance; `null` = cash, feeds `cashBalance`)
 - `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`
 - `savings` — `{ id, name, accountId, principal, interestRate, termMonths, startDate, maturityDate, status, withdrawals, note, createdAt, withdrawnAt?, finalAmount?, finalInterest? }`
 - `transfers` — `{ id, fromAccountId, toAccountId, amount, date, note }`
@@ -70,7 +70,7 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 | What | How |
 |---|---|
 | `totalAccountsBalance` | `Σ account.balance` |
-| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null) + cashSavingsAdjustment + cashTransferAdjustment` (untagged transactions + cash-funded savings + account↔cash transfers) |
+| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment` (untagged transactions + cash-funded savings + account↔cash transfers + cash-received/paid loan payments) |
 | `currentBalance` | `totalAccountsBalance + cashBalance` (unified — accounts + untagged cash) |
 | `savingsInterestEarned` | `principal × rate × termDays / 365` — projected interest at maturity for the full locked term (Vietnamese term-deposit convention). Once withdrawn, uses stored `finalInterest`. |
 | `totalSavingsPrincipal` / `totalSavingsInterest` | excludes `status === 'withdrawn'` |
@@ -86,6 +86,7 @@ Dates are stored as **`yyyy-mm-dd` strings** and parsed as local time via `Fmt.p
 - `updateSavings` rebalances the source(s) when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
 - `addTransfer` / `deleteTransfer` mutate the account side(s). `fromAccountId` or `toAccountId` may be `null` to represent the free-floating cash bucket — that side is reflected in `cashBalance` instead of a direct account mutation, so total wealth stays invariant.
 - `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` when `accountId` is set (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one. When `accountId` is `null`, the transaction is a pure cash-journal entry — no account is touched, but it still contributes to `cashBalance`.
+- `addLoanPayment` / `removeLoanPayment` mutate `accounts[payment.accountId].balance` when the payment has an `accountId` (lending `+=` amount, borrowing `−=` amount). When `accountId` is `null`, the payment is a cash entry and contributes to `cashBalance` instead. `deleteLoan` unwinds every payment's account effect before removing the loan.
 
 ## Style rules (non-negotiable)
 

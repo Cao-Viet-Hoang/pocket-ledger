@@ -238,6 +238,15 @@
     return txn.type === 'income' ? amount : -amount;
   }
 
+  // Signed delta that a loan payment contributes to its linked account's balance:
+  // lending payment = money received (+amount), borrowing payment = money paid (-amount).
+  // Returns 0 if unlinked.
+  function paymentAccountDelta(kind, payment) {
+    if (!payment || !payment.accountId) return 0;
+    const amount = Number(payment.amount || 0);
+    return kind === 'lending' ? amount : -amount;
+  }
+
   async function applyAccountDelta(accountId, delta) {
     if (!accountId || !delta) return;
     const acc = state.accounts.find((a) => a.id === accountId);
@@ -331,6 +340,14 @@
   }
 
   async function deleteLoan(kind, id) {
+    const loan = state[kind].find((l) => l.id === id);
+    // Unwind every linked payment's account effect before deleting — symmetric
+    // with removeLoanPayment so balances stay consistent.
+    if (loan) {
+      for (const p of (loan.payments || [])) {
+        await applyAccountDelta(p.accountId, -paymentAccountDelta(kind, p));
+      }
+    }
     await FirebaseClient.deleteItem(kind, id);
     state[kind] = state[kind].filter((l) => l.id !== id);
     emit();
@@ -338,10 +355,12 @@
 
   async function addLoanPayment(kind, loanId, payment) {
     const prefix = kind === 'lending' ? 'lp' : 'bp';
-    const p = Object.assign({ id: genId(prefix), note: '' }, payment);
+    const p = Object.assign({ id: genId(prefix), note: '', accountId: null }, payment);
+    if (!p.accountId) p.accountId = null;
     await FirebaseClient.arrayUnion(kind, loanId, 'payments', [p]);
     const loan = state[kind].find((l) => l.id === loanId);
     if (loan) loan.payments = (loan.payments || []).concat([p]);
+    await applyAccountDelta(p.accountId, paymentAccountDelta(kind, p));
     emit();
     return p;
   }
@@ -350,6 +369,7 @@
     await FirebaseClient.arrayRemove(kind, loanId, 'payments', [payment]);
     const loan = state[kind].find((l) => l.id === loanId);
     if (loan) loan.payments = (loan.payments || []).filter((p) => p.id !== payment.id);
+    await applyAccountDelta(payment.accountId, -paymentAccountDelta(kind, payment));
     emit();
   }
 
@@ -614,15 +634,18 @@
   }
 
   // Cash not held in any tracked account: opening balance + signed sum of
-  // transactions with accountId == null, adjusted for savings funded from cash
-  // and for transfers that cross the account ↔ cash boundary.
+  // transactions with accountId == null, adjusted for savings funded from cash,
+  // transfers that cross the account ↔ cash boundary, and loan payments
+  // received/paid in cash.
   // Active/matured cash savings subtract their principal (money locked away);
   // withdrawn cash savings add back their finalInterest (the earnings credited
   // to cash on payout — the principal returns implicitly as the subtraction
   // term drops out). Transfers with toAccountId==null moved money INTO cash;
-  // fromAccountId==null moved money OUT of cash. Transactions/savings/transfers
-  // wholly inside tracked accounts are already reflected in
-  // totalAccountsBalance() and are excluded here.
+  // fromAccountId==null moved money OUT of cash. Lending payments with
+  // accountId==null add cash (someone paid us back in cash); borrowing payments
+  // with accountId==null subtract cash (we paid someone back in cash).
+  // Transactions/savings/transfers/payments wholly inside tracked accounts are
+  // already reflected in totalAccountsBalance() and are excluded here.
   function cashBalance() {
     const unlinked = state.transactions.filter((t) => !t.accountId);
     const opening = Number(state.settings.openingBalance || 0);
@@ -638,7 +661,15 @@
       if (!tf.fromAccountId && tf.toAccountId) return sum - amount; // cash → account
       return sum;
     }, 0);
-    return opening + totalIncome(unlinked) - totalExpense(unlinked) + savingsAdjustment + transferAdjustment;
+    const sumUnlinkedPayments = (loans) => loans.reduce((sum, l) => {
+      return sum + (l.payments || [])
+        .filter((p) => !p.accountId)
+        .reduce((s, p) => s + Number(p.amount || 0), 0);
+    }, 0);
+    const loanPaymentAdjustment =
+      sumUnlinkedPayments(state.lending) - sumUnlinkedPayments(state.borrowing);
+    return opening + totalIncome(unlinked) - totalExpense(unlinked)
+      + savingsAdjustment + transferAdjustment + loanPaymentAdjustment;
   }
 
   function currentBalance() {

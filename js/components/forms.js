@@ -73,7 +73,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="amountValue" autocomplete="off" value="${initial.amount ? Number(initial.amount).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="amountValue" autocomplete="off" value="${initial.amount ? Number(initial.amount).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -177,7 +177,7 @@
       </div>
       <div class="form-group" style="margin-bottom: var(--space-3)">
         <label class="form-label">${I18n.t('person.phone')}</label>
-        <input type="text" class="input" id="personPhone" value="${escapeHTML(initial.phone || '')}" placeholder="+84 ..." autocomplete="off"/>
+        <input type="tel" class="input" id="personPhone" value="${escapeHTML(initial.phone || '')}" placeholder="+84 ..." autocomplete="off" inputmode="tel"/>
       </div>
       <div class="form-group">
         <label class="form-label">${I18n.t('txn.note')}</label>
@@ -245,7 +245,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="loanPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="loanPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -312,6 +312,7 @@
 
   function paymentForm(kind, loan) {
     const remaining = Store.loanRemaining(loan);
+    const accounts = Store.getAccounts();
     const bodyHTML = `
       <div class="text-muted" style="margin-bottom: var(--space-3); font-size: var(--fs-sm)">
         ${I18n.t('loan.remaining')}: <strong>${Fmt.formatAmount(remaining, { absolute: true })}</strong>
@@ -319,12 +320,18 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="payAmount" autocomplete="off"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="payAmount" autocomplete="off"/>
       </div>
 
-      <div class="form-group" style="margin-bottom: var(--space-3)">
-        <label class="form-label">${I18n.t('txn.date')}</label>
-        <input type="date" class="input" id="payDate" value="${todayISO()}"/>
+      <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.date')}</label>
+          <input type="date" class="input" id="payDate" value="${todayISO()}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('txn.account')}</label>
+          <select class="select" id="payAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">${I18n.t('txn.note')}</label>
@@ -345,11 +352,12 @@
             const root = document.getElementById('modalRoot');
             const amount = parseAmountInput(root.querySelector('#payAmount').value);
             const date = root.querySelector('#payDate').value;
+            const accountId = root.querySelector('#payAccount').value || null;
             const note = root.querySelector('#payNote').value.trim();
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
             try {
-              await Store.addLoanPayment(kind, loan.id, { amount, date, note });
+              await Store.addLoanPayment(kind, loan.id, { amount, date, accountId, note });
               Modal.close();
               Toast.show(I18n.t('toast.saved'));
             } catch (err) {
@@ -474,13 +482,13 @@
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t('account.accountNumber')}</label>
-          <input type="text" class="input" id="accNumber" value="${escapeHTML(initial.accountNumber || '')}" autocomplete="off"/>
+          <input type="text" class="input" id="accNumber" value="${escapeHTML(initial.accountNumber || '')}" autocomplete="off" inputmode="numeric" pattern="[0-9]*"/>
         </div>
       </div>
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="accBalance" autocomplete="off" value="${initial.balance ? Number(initial.balance).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="accBalance" autocomplete="off" value="${initial.balance ? Number(initial.balance).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="form-group">
@@ -548,17 +556,17 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="savPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="savPrincipal" autocomplete="off" value="${initial.principal ? Number(initial.principal).toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
           <label class="form-label">${I18n.t('savings.interestRate')}</label>
-          <input type="number" class="input" id="savRate" step="0.01" min="0" max="100" value="${initial.interestRate || ''}"/>
+          <input type="number" class="input" id="savRate" step="0.01" min="0" max="100" value="${initial.interestRate || ''}" inputmode="decimal"/>
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t('savings.termMonths')}</label>
-          <input type="number" class="input" id="savTerm" min="1" max="360" value="${initial.termMonths || ''}"/>
+          <input type="number" class="input" id="savTerm" min="1" max="360" value="${initial.termMonths || ''}" inputmode="numeric"/>
         </div>
       </div>
 
@@ -670,7 +678,7 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" placeholder="0" id="tfAmount" autocomplete="off"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="tfAmount" autocomplete="off"/>
       </div>
 
       <div class="form-group" style="margin-bottom: var(--space-3)">

@@ -109,11 +109,13 @@ Money inputs use:
 ```html
 <div class="amount-input">
   <span class="currency">${Store.currency.symbol}</span>
-  <input type="text" placeholder="0" id="…" autocomplete="off"/>
+  <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="…" autocomplete="off"/>
 </div>
 ```
 
 Then call `wireAmountInput(input)` inside `forms.js` (it's not exported — keep it local). The handler formats on every keystroke using `toLocaleString('en-US')` and strips non-digits.
+
+`inputmode` + `pattern` together trigger the mobile numpad on every browser we care about (`inputmode` handles modern Android/iOS, `pattern="[0-9]*"` covers iOS Safari < 12). For other numeric fields pick the closest `inputmode` value: `tel` for phone numbers, `decimal` for rates / non-integer amounts, `numeric` for integer-only fields.
 
 ## Confirm dialog
 
