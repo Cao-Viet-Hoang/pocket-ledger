@@ -141,6 +141,8 @@
   "cat.health": "Sức khỏe",
 
   "loan.principal": "Gốc",
+  "loan.fromAccount": "Trích từ tài khoản",
+  "loan.toAccount": "Nhận vào tài khoản",
   "loan.paid": "Đã trả",
   "loan.collected": "Đã thu",
   "loan.remaining": "Còn lại",

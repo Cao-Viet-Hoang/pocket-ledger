@@ -261,6 +261,8 @@
       ? (isEdit ? 'action.edit.loan' : 'action.add.loan')
       : (isEdit ? 'action.edit.debt' : 'action.add.debt');
 
+    const accountLabelKey = kind === 'lending' ? 'loan.fromAccount' : 'loan.toAccount';
+
     const bodyHTML = `
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
@@ -268,7 +270,7 @@
           <select class="select" id="loanPerson">${peopleOptionsHTML(people, { includeBlank: false })}</select>
         </div>
         <div class="form-group">
-          <label class="form-label">${I18n.t('txn.account')}</label>
+          <label class="form-label">${I18n.t(accountLabelKey)}</label>
           <select class="select" id="loanAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
         </div>
       </div>
@@ -345,6 +347,7 @@
   function paymentForm(kind, loan) {
     const remaining = Store.loanRemaining(loan);
     const accounts = Store.getAccounts();
+    const accountLabelKey = kind === 'lending' ? 'loan.toAccount' : 'loan.fromAccount';
     const bodyHTML = `
       <div class="text-muted" style="margin-bottom: var(--space-3); font-size: var(--fs-sm)">
         ${I18n.t('loan.remaining')}: <strong>${Fmt.formatAmount(remaining, { absolute: true })}</strong>
@@ -361,7 +364,7 @@
           <input type="date" class="input" id="payDate" value="${todayISO()}"/>
         </div>
         <div class="form-group">
-          <label class="form-label">${I18n.t('txn.account')}</label>
+          <label class="form-label">${I18n.t(accountLabelKey)}</label>
           <select class="select" id="payAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
         </div>
       </div>

@@ -141,6 +141,8 @@
   "cat.health": "Health",
 
   "loan.principal": "Principal",
+  "loan.fromAccount": "From account",
+  "loan.toAccount": "To account",
   "loan.paid": "Paid",
   "loan.collected": "Collected",
   "loan.remaining": "Remaining",
