@@ -6,11 +6,7 @@
 (function (global) {
   'use strict';
 
-  function escapeHTML(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHTML = Fmt.escapeHTML;
 
   function personCard(person) {
     const owed = Store.personOwedToUser(person.id);

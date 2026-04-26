@@ -24,6 +24,9 @@
     const typeKey = 'account.type.' + acc.type;
     const balance = Number(acc.balance || 0);
     const balanceClass = balance >= 0 ? 'text-income' : 'text-expense';
+    // The cash account is system-managed and cannot be deleted — hide its
+    // delete button. Edit (rename, change icon, adjust balance) is allowed.
+    const isCash = acc.id === Store.CASH_ACCOUNT_ID;
     return `
       <div class="account-card" data-id="${acc.id}">
         <div class="person-head">
@@ -39,9 +42,9 @@
             <button class="icon-btn ghost" data-edit="${acc.id}" title="${I18n.t('action.edit')}">
               <span data-icon="edit"></span>
             </button>
-            <button class="icon-btn ghost" data-delete="${acc.id}" title="${I18n.t('action.delete')}">
+            ${isCash ? '' : `<button class="icon-btn ghost" data-delete="${acc.id}" title="${I18n.t('action.delete')}">
               <span data-icon="trash"></span>
-            </button>
+            </button>`}
           </div>
         </div>
         <div class="person-stats" style="grid-template-columns:1fr">
@@ -59,13 +62,8 @@
   }
 
   function transferRow(tf) {
-    const cashLabel = I18n.t('transfer.cash');
-    const fromLabel = tf.fromAccountId
-      ? ((Store.getAccountById(tf.fromAccountId) || {}).name || '?')
-      : cashLabel;
-    const toLabel = tf.toAccountId
-      ? ((Store.getAccountById(tf.toAccountId) || {}).name || '?')
-      : cashLabel;
+    const fromLabel = (Store.getAccountById(tf.fromAccountId) || {}).name || '?';
+    const toLabel = (Store.getAccountById(tf.toAccountId) || {}).name || '?';
     return `
       <div class="txn-row">
         <span class="circle-icon info" data-icon="arrow-left-right"></span>
@@ -80,11 +78,7 @@
       </div>`;
   }
 
-  function escapeHTML(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHTML = Fmt.escapeHTML;
 
   function render(container) {
     const accounts = Store.getAccounts();

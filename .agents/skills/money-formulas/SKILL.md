@@ -13,7 +13,7 @@ Pocket Ledger has **one** source of truth for money math: `js/store.js`. Read th
 |---|---|---|
 | Monthly income | `totalIncome(txns)` | `Σ t.amount` where `type='income'` |
 | Monthly expense | `totalExpense(txns)` | `Σ t.amount` where `type='expense'` |
-| Current balance | `currentBalance()` | If any accounts: `Σ account.balance`. Else: `opening + income − expense`. |
+| Current balance | `currentBalance()` | `Σ account.balance` — every entity is account-coupled, so this single sum is the full picture. |
 | Net worth | `netWorth()` | `currentBalance + Σ(principal + projectedInterest over active/matured savings) + receivables − payables` |
 | Account total | `totalAccountsBalance()` | `Σ account.balance` |
 | Savings interest | `savingsInterestEarned(sav)` | Simple, projected at maturity (Vietnamese term-deposit convention): `principal × (rate/100) × termDays / 365`. `termDays = daysBetween(startDate, maturityDate)`. Once withdrawn, uses stored `finalInterest`. |
@@ -34,14 +34,10 @@ Pocket Ledger has **one** source of truth for money math: `js/store.js`. Read th
    - `withdrawSavings` → account.balance += principal + projectedInterest
    - `deleteSavings (not withdrawn)` → account.balance += principal
 2. **Transfers keep total account balance constant.** Delete reverses.
-3. **Transactions mutate the linked account's balance** when `accountId` is set (income `+=`, expense `−=`); untagged transactions feed `cashBalance` instead. See money-calculations.md.
+3. **Transactions mutate the linked account's balance** (income `+=`, expense `−=`). Every transaction is account-coupled — `accountId` is required and defaults to `Store.CASH_ACCOUNT_ID` (`acc-cash`).
 4. **Savings interest is a fixed projection for the full locked term** — not daily-accrued. A deposit's interest only changes when the user edits principal / rate / dates.
 5. **Loan remaining never goes negative** — `max(0, …)`.
 6. **Once withdrawn, savings interest is frozen** — use `finalInterest`, not a recomputation.
-
-## Why `addTransaction` doesn't mutate accounts
-
-Deliberate design. When the user has no accounts, balance = `opening + income − expense`. When the user has accounts, the accounts are the authoritative cash position (reconciled against real banks), and transactions become a reporting layer. Wiring transactions to accounts would require `accountId` on every transaction, plus migration. Treat that as a feature request, not a bug fix.
 
 ## Dashboard delta polarity
 
@@ -67,4 +63,4 @@ Point at the specific function in `js/store.js:<line>` and paste the formula row
 - Do not re-implement any of these inside a page file. Always call `Store.*`.
 - Do not introduce a new day-count convention (stay on 365).
 - Do not change simple interest to compound unless the user explicitly asks — Vietnamese term deposits are typically simple interest, matching the current model.
-- Do not add a new balance formula that mixes accounts and transactions — that's the combinatorial explosion we're avoiding.
+- Do not reintroduce a free-floating cash bucket alongside accounts — every entity is account-coupled now, and `acc-cash` is the default fallback. Adding a parallel cash term would re-create the dual-source problem the migration just retired.

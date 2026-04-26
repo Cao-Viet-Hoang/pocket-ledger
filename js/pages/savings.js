@@ -7,11 +7,7 @@
 
   let currentFilter = 'all';
 
-  function escapeHTML(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHTML = Fmt.escapeHTML;
 
   function statusBadge(status) {
     if (status === 'matured') return `<span class="badge badge-warning">${I18n.t('savings.status.matured')}</span>`;

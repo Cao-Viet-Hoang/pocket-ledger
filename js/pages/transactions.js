@@ -62,7 +62,7 @@
       if (q) {
         const cat = Store.getCategoryById(t.category);
         const person = t.personId ? Store.getPersonById(t.personId) : null;
-        const account = t.accountId ? Store.getAccountById(t.accountId) : null;
+        const account = Store.getAccountById(t.accountId);
         const amountRaw = String(t.amount);
         const amountFormatted = Fmt.formatAmount(t.amount, { absolute: true });
         const hay = [
@@ -108,7 +108,7 @@
       .map((t) => {
         const cat = Store.getCategoryById(t.category);
         const person = t.personId ? Store.getPersonById(t.personId) : null;
-        const account = t.accountId ? Store.getAccountById(t.accountId) : null;
+        const account = Store.getAccountById(t.accountId);
         const sign = t.type === 'income' ? '+' : '-';
         const amountCls = t.type === 'income' ? 'text-income' : 'text-expense';
         return `
@@ -133,7 +133,7 @@
               : '<span class="text-subtle">—</span>'}</td>
             <td class="nowrap">${account
               ? `<span class="flex items-center gap-2"><span data-icon="${account.icon || 'wallet'}"></span><span>${escapeHTML(account.name)}</span></span>`
-              : `<span class="text-subtle">${I18n.t('txn.account.none')}</span>`}</td>
+              : '<span class="text-subtle">—</span>'}</td>
             <td class="text-muted nowrap">${Fmt.formatDate(t.date, I18n.getLang())}</td>
             <td class="text-right nowrap amount ${amountCls}">${sign}${Fmt.formatAmount(t.amount, { absolute: true })}</td>
             <td class="text-right nowrap">

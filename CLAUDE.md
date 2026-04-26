@@ -56,22 +56,21 @@ Stored per user at `ledgers/{username}/<collection>/{id}`:
 
 - `categories` — `{ id, nameKey, type: 'income'|'expense', icon, tone }`
 - `people` — `{ id, name, phone, note, color: 1..6, createdAt }`
-- `transactions` — `{ id, type, amount, category, date, personId, accountId, note, createdAt }` (`accountId` is optional; when set, the transaction mutates that account's balance. `null` = cash, no account effect)
-- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent. `null` on either = cash, feeds `cashBalance`)
-- `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`
+- `transactions` — `{ id, type, amount, category, date, personId, accountId, note, createdAt }` (`accountId` is required — every transaction mutates that account's balance: income `+=`, expense `−=`)
+- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent and required)
+- `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`. The system seeds an account with id `acc-cash` (locked from deletion) on first connect; it is the default for any form that doesn't specify one.
 - `savings` — `{ id, name, accountId, principal, interestRate, termMonths, startDate, maturityDate, status, withdrawals, note, createdAt, withdrawnAt?, finalAmount?, finalInterest? }`
 - `transfers` — `{ id, fromAccountId, toAccountId, amount, date, note, createdAt }`
-- User-meta doc — `{ settings: { currency, openingBalance, defaultLanguage }, seededAt }`
+- User-meta doc — `{ settings: { currency, defaultLanguage }, seededAt }`
 
-Dates (`date`, `startDate`, `dueDate`, `maturityDate`) are **`yyyy-mm-dd` strings** parsed as local time via `Fmt.parseDate`. `createdAt` is a full ISO timestamp (`new Date().toISOString()`) stamped by the `add*` mutations — used as the same-day tiebreaker in lists. `Store.backfillTimestamps()` runs on connect to stamp legacy records that predate this field. Money is stored as **integers** (VND has 0 decimals).
+Dates (`date`, `startDate`, `dueDate`, `maturityDate`) are **`yyyy-mm-dd` strings** parsed as local time via `Fmt.parseDate`. `createdAt` is a full ISO timestamp (`new Date().toISOString()`) stamped by the `add*` mutations — used as the same-day tiebreaker in lists. `Store.backfillTimestamps()` runs on connect to stamp legacy records that predate this field. `Store.seedCashAccount()` also runs on connect: idempotent, creates `acc-cash` with `balance: 0` if missing. Money is stored as **integers** (VND has 0 decimals).
 
 ## Money formulas (see `.claude/rules/money-calculations.md` for full derivations)
 
 | What | How |
 |---|---|
 | `totalAccountsBalance` | `Σ account.balance` |
-| `cashBalance` | `openingBalance + Σ income(accountId=null) − Σ expense(accountId=null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment + cashLoanPrincipalAdjustment` (untagged transactions + cash-funded savings + account↔cash transfers + cash-settled loan payments + cash-sourced loan principals) |
-| `currentBalance` | `totalAccountsBalance + cashBalance` (unified — accounts + untagged cash) |
+| `currentBalance` | `totalAccountsBalance` — every entity is account-coupled, so the sum of account balances is the full picture |
 | `savingsInterestEarned` | `principal × rate × termDays / 365` — projected interest at maturity for the full locked term (Vietnamese term-deposit convention). Once withdrawn, uses stored `finalInterest`. |
 | `totalSavingsPrincipal` / `totalSavingsInterest` | excludes `status === 'withdrawn'` |
 | `netWorth` | `currentBalance + activeSavings(principal + projectedInterest) + receivables − payables` |
@@ -79,15 +78,16 @@ Dates (`date`, `startDate`, `dueDate`, `maturityDate`) are **`yyyy-mm-dd` string
 | `loanStatus` | `paid` (remaining≤0) > `overdue` (due<today) > `partial` (paid>0) > `unpaid` |
 | `totalReceivable` / `totalPayable` | `Σ loanRemaining` over lending / borrowing |
 
-**Side-effects wired through `Store.*`:**
-- `addSavings` deducts principal from source account when `accountId` is set; when `null`, the principal is subtracted from `cashBalance` instead.
-- `withdrawSavings` returns `principal + interest` to the source (account or cash), stamps `finalInterest` / `finalAmount`.
-- `deleteSavings` refunds principal (to account or cash) if not yet withdrawn.
-- `updateSavings` rebalances the source(s) when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
-- `addTransfer` / `deleteTransfer` mutate the account side(s). `fromAccountId` or `toAccountId` may be `null` to represent the free-floating cash bucket — that side is reflected in `cashBalance` instead of a direct account mutation, so total wealth stays invariant.
-- `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` when `accountId` is set (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one. When `accountId` is `null`, the transaction is a pure cash-journal entry — no account is touched, but it still contributes to `cashBalance`.
-- `addLoan` mutates `accounts[loan.accountId].balance` when the loan has an `accountId` (lending `−=` principal, borrowing `+=` principal). `updateLoan` rolls back the prior principal effect and applies the new one when `principal` or `accountId` changes. `deleteLoan` refunds/returns the principal (reverse of add) in addition to unwinding every payment. When `accountId` is `null`, the principal effect is reflected in `cashBalance` instead.
-- `addLoanPayment` / `removeLoanPayment` mutate `accounts[payment.accountId].balance` when the payment has an `accountId` (lending `+=` amount, borrowing `−=` amount). When `accountId` is `null`, the payment is a cash entry and contributes to `cashBalance` instead.
+**Side-effects wired through `Store.*`** (every entity is account-coupled — there is no free-floating cash bucket; "cash" is just the seeded `acc-cash` account):
+- `addSavings` deducts `principal` from `accounts[savings.accountId].balance`.
+- `withdrawSavings` returns `principal + interest` to the source account, stamps `finalInterest` / `finalAmount`.
+- `deleteSavings` refunds principal to the source account if not yet withdrawn.
+- `updateSavings` rebalances when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
+- `addTransfer` / `deleteTransfer` mutate both account balances (`fromAccountId` `−=`, `toAccountId` `+=`). Same-source rejected by `Forms.transferForm`.
+- `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one.
+- `addLoan` mutates `accounts[loan.accountId].balance` (lending `−=` principal, borrowing `+=` principal). `updateLoan` rolls back the prior delta and applies the new one when `principal` or `accountId` changes. `deleteLoan` refunds/returns the principal and unwinds every payment.
+- `addLoanPayment` / `removeLoanPayment` mutate `accounts[payment.accountId].balance` (lending `+=` amount, borrowing `−=` amount).
+- `deleteAccount` rejects the cash account (`Store.CASH_ACCOUNT_ID`); the UI also hides its delete button.
 
 ## Style rules (non-negotiable)
 

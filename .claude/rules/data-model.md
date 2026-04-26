@@ -18,11 +18,13 @@ ledgers/{username}/savings/{id}
 ledgers/{username}/transfers/{id}
 ```
 
-Meta doc shape: `{ settings: { currency, openingBalance, defaultLanguage }, seededAt }`.
+Meta doc shape: `{ settings: { currency, defaultLanguage }, seededAt }`.
 
 All collections are mirrored into `state.*` in `store.js` on load; mutations write both Firestore and the local cache, then `emit()`.
 
 **`createdAt` invariant**: every transaction / transfer / loan / loan-payment carries a `createdAt` ISO timestamp stamped by the `add*` mutation. It's the canonical same-day tiebreaker used by list pages. On connect, `Store.backfillTimestamps()` runs after `fetchAll` and stamps any legacy record missing the field — deriving the value from the id's embedded base36 timestamp when possible, otherwise falling back to the record's `date` / `startDate` at local midnight. Idempotent.
+
+**Account-coupling invariant**: every transaction / savings / transfer / loan / loan-payment has a non-null `accountId` (or `fromAccountId` / `toAccountId` for transfers) pointing at a real account. The system cash account `acc-cash` is seeded by `Store.seedCashAccount()` on connect (idempotent — no-op when it already exists) and acts as the default fallback whenever a form leaves the field unset. The store assumes every record is account-coupled; mutations call `applyAccountDelta(accountId, …)` directly without null-guards.
 
 ## Entity schemas
 
@@ -52,18 +54,14 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 - `amount`: positive integer (sign comes from `type`)
 - `category`: must be an existing `categories[].id`
 - `personId`: nullable
-- `accountId`: nullable. When set, the transaction mutates `accounts[accountId].balance`
-  (income `+=`, expense `−=`). When `null`, the transaction is treated as free-floating
-  cash and contributes to `cashBalance` instead — see money-calculations.md.
+- `accountId`: **required**. Mutates `accounts[accountId].balance` (income `+=`, expense `−=`). Defaults to `Store.CASH_ACCOUNT_ID` (`acc-cash`) when the form leaves it unset.
 - `createdAt`: ISO timestamp stamped by `addTransaction`. Used as the same-day
   tiebreaker when listing transactions so the most recently created appears
   first. Legacy records without this field get it backfilled on connect.
 - **Invariants**:
   - `addTransaction` applies the account delta on create; `updateTransaction` rolls back
-    the previous delta and applies the new one (handling `accountId` / `amount` / `type`
-    changes and `null ↔ acc-*` transitions); `deleteTransaction` rolls back the delta.
-  - A missing `accountId` field on stored records is treated as `null` (backward-compatible
-    with pre-coupling data).
+    the previous delta and applies the new one (handling `accountId` / `amount` / `type` changes);
+    `deleteTransaction` rolls back the delta.
 
 ### `lending` / `borrowing`
 ```json
@@ -88,14 +86,10 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   creation time. Used as the same-day tiebreaker in the payment-history list.
   Legacy records get the field backfilled on connect.
 - The loan's `accountId` is the source of the principal: lending subtracts the
-  principal from that account on create; borrowing adds it. Nullable — `null`
-  means the principal came from / went to free-floating cash, reflected via
-  `cashBalance`. Independent of each payment's own `accountId`.
-- Each payment's `accountId` is nullable. When set, the payment mutates that
-  account's `balance` (lending `+=`, borrowing `−=`). When `null`, the payment
-  is a cash entry and contributes to `cashBalance` instead. A missing
-  `accountId` field on a loan or payment stored record is treated as `null`
-  (backward-compatible with pre-coupling data).
+  principal from that account on create; borrowing adds it. **Required** — defaults to
+  `acc-cash` when the form leaves it unset. Independent of each payment's own `accountId`.
+- Each payment's `accountId` is **required** and mutates that account's `balance`
+  (lending `+=`, borrowing `−=`). Defaults to `acc-cash` when unset.
 - **Invariants**:
   - `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
   - `addLoan` applies the principal delta on create (lending `−=`, borrowing
@@ -108,14 +102,15 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 ### `accounts`
 ```json
 {
-  "id": "acc-cash", "name": "Tiền mặt",
+  "id": "acc-cash", "name": "Cash",
   "type": "cash", "bankName": "", "accountNumber": "",
   "balance": 5000000, "icon": "wallet", "color": 1,
   "note": "", "createdAt": "yyyy-mm-dd"
 }
 ```
 - `type`: `'cash' | 'bank' | 'ewallet'`
-- `balance` is the **current** balance and is mutated directly by transactions (when `accountId` is set), savings (create / withdraw / delete / edit), and transfers.
+- `balance` is the **current** balance and is mutated directly by transactions, savings (create / withdraw / delete / edit), transfers, loan principals, and loan payments.
+- The system seeds an account with id `acc-cash` (locked from deletion via `Store.deleteAccount`; the UI hides its delete button) on first connect. Its `name` is localized from `account.type.cash` at seed time. After seeding, it behaves like any other account — user can rename, change icon/color, edit balance.
 - **Invariant**: `balance` can go negative in the local cache if external mutations drift; the UI prevents most negative paths (transfer checks sufficient balance).
 
 ### `savings`
@@ -131,22 +126,13 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 }
 ```
 - `interestRate` is **%/year** (5.5 means 5.5%).
-- `accountId` is nullable. When set, savings side-effects mutate that account's
-  `balance`. When `null`, the savings is funded from free-floating cash and is
-  reflected in `cashBalance` instead — see money-calculations.md.
+- `accountId` is **required**. All savings side-effects mutate that account's `balance`. Defaults to `acc-cash` when unset.
 - `status` stored value is only load-bearing for `'withdrawn'`. Otherwise status is **dynamically computed** from `maturityDate` vs. today — see `store.savingsStatus`.
 - `withdrawnAt`, `finalAmount`, `finalInterest` are set by `Store.withdrawSavings` and must not be edited elsewhere.
 - **Invariants**:
-  - Creating savings with `accountId` deducts `principal` from that account.
-    Creating with `accountId=null` leaves accounts untouched and is counted as
-    a `-principal` term inside `cashBalance`.
-  - Withdrawing with `accountId` returns `principal + projectedInterest` to the
-    account (projected interest at maturity — see money-calculations.md).
-    Withdrawing a cash savings (`accountId=null`) unlocks the principal back to
-    cash and credits `finalInterest` to `cashBalance`.
-  - Deleting an active/matured savings refunds `principal` (to the account if
-    set, otherwise to cash by removing the record from the `cashBalance` sum).
-    Deleting a withdrawn one is a pure delete.
+  - Creating savings deducts `principal` from `accounts[savings.accountId].balance`.
+  - Withdrawing returns `principal + projectedInterest` to the account (projected interest at maturity — see money-calculations.md).
+  - Deleting an active/matured savings refunds `principal` to the account. Deleting a withdrawn one is a pure delete.
   - Editing `principal` or `accountId` on an active/matured savings rebalances
     the old and new source(s) via `Store.updateSavings` (refund old, deduct
     new). Withdrawn savings are frozen and skip the rebalance.
@@ -157,25 +143,17 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   "amount": 3000000, "date": "yyyy-mm-dd", "note": "…",
   "createdAt": "2026-04-23T09:12:34.567Z" }
 ```
-- `fromAccountId` / `toAccountId` are nullable. A `null` side represents
-  free-floating cash (the `cashBalance` bucket). Allowed shapes:
-  - account → account (classic inter-account transfer)
-  - account → cash (`toAccountId: null`, e.g. ATM withdrawal from bank to wallet)
-  - cash → account (`fromAccountId: null`, e.g. depositing physical cash)
+- `fromAccountId` / `toAccountId` are **required** — both must be real account ids.
 - **Invariant**: `fromAccountId !== toAccountId` (enforced in `Forms.transferForm`).
-  `null === null` is also rejected, so cash ↔ cash is impossible.
-- `addTransfer` subtracts from source, adds to destination. When a side is
-  `null`, that side's effect is reflected inside `cashBalance()`'s
-  `transferAdjustment` term instead of a direct account mutation — total
-  wealth is unchanged.
-- `deleteTransfer` reverses the mutation (symmetric with add).
+- `addTransfer` subtracts `amount` from `fromAccountId` and adds it to `toAccountId`. `deleteTransfer` reverses the mutation (symmetric with add).
 
 ## Cross-entity invariants (not enforced — respect them in new code)
 
-1. **Account ↔ savings coupling.** Savings is always linked to an account. Breaking the link (e.g. deleting the account) orphans the savings — the UI tolerates it but the balance math goes slightly wrong. If you add a delete-account flow that touches savings, decide explicitly: cascade, block, or warn.
-2. **Account ↔ transaction coupling.** Transactions may be linked to an account via `accountId`. Tagged transactions mutate the account balance through `Store.addTransaction` / `updateTransaction` / `deleteTransaction`. Untagged (`accountId: null`) transactions are pure cash-journal entries and feed into `cashBalance`. If you add a delete-account flow, decide: cascade-delete tagged transactions, null them out (convert to cash), block the delete, or warn.
-3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app. Payments may be linked to an account via `payment.accountId`; if you add a delete-account flow, decide whether to cascade, null out, block, or warn on linked payments too.
+1. **Account ↔ savings coupling.** Savings is always linked to an account. Breaking the link (e.g. deleting the account) orphans the savings — the UI tolerates it but the balance math goes slightly wrong. If you add a delete-account flow that touches savings, decide explicitly: cascade, block, or warn. Note: the cash account is locked from deletion to keep this invariant trivially safe for the default fallback.
+2. **Account ↔ transaction coupling.** Every transaction is linked to an account. Mutations (`Store.addTransaction` / `updateTransaction` / `deleteTransaction`) keep the account balance consistent. If you add a delete-account flow, decide: cascade-delete linked transactions, reassign to cash, block the delete, or warn.
+3. **Payments are embedded, not separate docs.** Don't split them out without a migration plan; the array-field strategy is fine for the scale of this app. Payments are linked to an account via `payment.accountId`; the same delete-account question applies.
 4. **Categories are global per-user.** Deleting a category orphans any transaction using it (UI shows `—`). No delete-category flow exists yet; if you add one, warn or reassign.
+5. **The cash account is system-managed.** `Store.deleteAccount` rejects `Store.CASH_ACCOUNT_ID`; the accounts page hides its delete button. Forms default to it whenever the account selector is left empty.
 
 ## Id generation
 

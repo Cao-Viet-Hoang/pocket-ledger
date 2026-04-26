@@ -3,11 +3,18 @@
  *
  * Lifecycle:
  *   1. `getStoredCredentials()`  — returns cached { config, username } from localStorage
- *   2. `configure({config, username})` — init Firebase, seed defaults if empty, fetch all, backfill timestamps
+ *   2. `configure({config, username})` — init Firebase, seed defaults if empty,
+ *      fetch all, backfill `createdAt` timestamps, seed the system cash account
+ *      if missing.
  *   3. `disconnect()`            — clear credentials and reset state
  *
  * Mutations push to Firestore and update local cache, then emit change events.
  * Pages can subscribe via `onChange(cb)` and re-render.
+ *
+ * Account coupling: every transaction / savings / transfer / loan / loan
+ * payment is linked to an account via `accountId` (or `fromAccountId` /
+ * `toAccountId`). The system-managed cash account (id `acc-cash`) is always
+ * present and acts as the default when the caller leaves the field unset.
  */
 (function (global) {
   'use strict';
@@ -18,9 +25,13 @@
   const LS_LAST_CONFIG = 'pl.fb.lastConfig';
   const LS_LAST_USER = 'pl.fb.lastUser';
 
+  // Fixed id of the system-managed cash account. Always present, locked from
+  // deletion. Acts as the default for any form that doesn't specify an
+  // accountId (transactions, savings, loans, loan payments).
+  const CASH_ACCOUNT_ID = 'acc-cash';
+
   const DEFAULT_SETTINGS = {
     currency: { code: 'VND', symbol: '₫', position: 'suffix', decimals: 0 },
-    openingBalance: 0,
     defaultLanguage: 'en'
   };
 
@@ -225,6 +236,28 @@
     if (tasks.length) await Promise.all(tasks);
   }
 
+  // Ensures the system-managed cash account (`acc-cash`) exists in Firestore
+  // and the local cache. Idempotent: returns early when the account already
+  // exists. Created with `balance: 0` for new ledgers. The account name is
+  // localized at seed time but freely renameable afterwards.
+  async function seedCashAccount() {
+    if (state.accounts.some((a) => a.id === CASH_ACCOUNT_ID)) return;
+
+    const accountDefs = await loadJSON('defaults/accounts.json').catch(() => []);
+    const template = accountDefs.find((a) => a.id === CASH_ACCOUNT_ID) || {};
+    const cash = Object.assign(
+      { id: CASH_ACCOUNT_ID, type: 'cash', bankName: '', accountNumber: '',
+        balance: 0, icon: 'wallet', color: 1, note: '' },
+      template,
+      {
+        name: I18n.t('account.type.cash'),
+        createdAt: new Date().toISOString().slice(0, 10)
+      }
+    );
+    await FirebaseClient.setItem('accounts', cash.id, cash);
+    state.accounts.unshift(cash);
+  }
+
   async function configure({ config, username }) {
     await FirebaseClient.init(config, username);
     state.config = config;
@@ -232,6 +265,7 @@
     await seedDefaults();
     await fetchAll();
     await backfillTimestamps();
+    await seedCashAccount();
     state.configured = true;
     saveStoredCredentials(config, state.username);
     saveLastUsedCredentials(config, state.username);
@@ -262,34 +296,29 @@
     return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
   }
 
-  // Signed delta that a transaction contributes to its linked account's balance:
-  // +amount for income, -amount for expense. Returns 0 if unlinked.
+  // Signed delta that a transaction contributes to its account's balance:
+  // +amount for income, -amount for expense.
   function txnAccountDelta(txn) {
-    if (!txn || !txn.accountId) return 0;
     const amount = Number(txn.amount || 0);
     return txn.type === 'income' ? amount : -amount;
   }
 
-  // Signed delta that a loan payment contributes to its linked account's balance:
+  // Signed delta that a loan payment contributes to its account's balance:
   // lending payment = money received (+amount), borrowing payment = money paid (-amount).
-  // Returns 0 if unlinked.
   function paymentAccountDelta(kind, payment) {
-    if (!payment || !payment.accountId) return 0;
     const amount = Number(payment.amount || 0);
     return kind === 'lending' ? amount : -amount;
   }
 
-  // Signed delta that a loan's principal contributes to its linked account's balance:
+  // Signed delta that a loan's principal contributes to its account's balance:
   // lending = money given out (-principal), borrowing = money received (+principal).
-  // Returns 0 if unlinked.
   function loanAccountDelta(kind, loan) {
-    if (!loan || !loan.accountId) return 0;
     const principal = Number(loan.principal || 0);
     return kind === 'lending' ? -principal : principal;
   }
 
   async function applyAccountDelta(accountId, delta) {
-    if (!accountId || !delta) return;
+    if (!delta) return;
     const acc = state.accounts.find((a) => a.id === accountId);
     if (!acc) return;
     acc.balance = Number(acc.balance || 0) + delta;
@@ -299,11 +328,11 @@
   async function addTransaction(data) {
     const id = data.id || genId('t');
     const rec = Object.assign(
-      { personId: null, accountId: null, note: '', createdAt: new Date().toISOString() },
+      { personId: null, accountId: CASH_ACCOUNT_ID, note: '', createdAt: new Date().toISOString() },
       data,
       { id }
     );
-    if (!rec.accountId) rec.accountId = null;
+    if (!rec.accountId) rec.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.setItem('transactions', id, rec);
     state.transactions.push(rec);
     await applyAccountDelta(rec.accountId, txnAccountDelta(rec));
@@ -315,7 +344,7 @@
     const prev = state.transactions.find((t) => t.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
-    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.updateItem('transactions', id, patch);
     const i = state.transactions.findIndex((t) => t.id === id);
     if (i >= 0) state.transactions[i] = Object.assign({}, state.transactions[i], patch);
@@ -369,15 +398,15 @@
     if (kind !== 'lending' && kind !== 'borrowing') throw new Error('Invalid kind: ' + kind);
     const id = data.id || genId(kind === 'lending' ? 'l' : 'b');
     const rec = Object.assign(
-      { note: '', payments: [], accountId: null, createdAt: new Date().toISOString() },
+      { note: '', payments: [], accountId: CASH_ACCOUNT_ID, createdAt: new Date().toISOString() },
       data,
       { id }
     );
-    if (!rec.accountId) rec.accountId = null;
+    if (!rec.accountId) rec.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.setItem(kind, id, rec);
     state[kind].push(rec);
-    // Principal leaves (lending) or enters (borrowing) the source account/cash
-    // so the money-in/money-out invariant holds.
+    // Principal leaves (lending) or enters (borrowing) the source account so
+    // the money-in/money-out invariant holds.
     await applyAccountDelta(rec.accountId, loanAccountDelta(kind, rec));
     emit();
     return rec;
@@ -387,7 +416,7 @@
     const prev = state[kind].find((l) => l.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
-    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.updateItem(kind, id, patch);
     const i = state[kind].findIndex((l) => l.id === id);
     if (i >= 0) state[kind][i] = Object.assign({}, state[kind][i], patch);
@@ -425,10 +454,10 @@
   async function addLoanPayment(kind, loanId, payment) {
     const prefix = kind === 'lending' ? 'lp' : 'bp';
     const p = Object.assign(
-      { id: genId(prefix), note: '', accountId: null, createdAt: new Date().toISOString() },
+      { id: genId(prefix), note: '', accountId: CASH_ACCOUNT_ID, createdAt: new Date().toISOString() },
       payment
     );
-    if (!p.accountId) p.accountId = null;
+    if (!p.accountId) p.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.arrayUnion(kind, loanId, 'payments', [p]);
     const loan = state[kind].find((l) => l.id === loanId);
     if (loan) loan.payments = (loan.payments || []).concat([p]);
@@ -477,6 +506,12 @@
   }
 
   async function deleteAccount(id) {
+    // Cash account is system-managed and acts as the default fallback for
+    // every entity — refuse to delete it. Defense in depth; the UI also
+    // hides the delete button for this id.
+    if (id === CASH_ACCOUNT_ID) {
+      throw new Error('Cash account cannot be deleted');
+    }
     await FirebaseClient.deleteItem('accounts', id);
     state.accounts = state.accounts.filter((a) => a.id !== id);
     emit();
@@ -487,20 +522,16 @@
   async function addSavings(data) {
     const id = data.id || genId('sav');
     const rec = Object.assign({
-      accountId: null, principal: 0, interestRate: 0, termMonths: 0,
+      accountId: CASH_ACCOUNT_ID, principal: 0, interestRate: 0, termMonths: 0,
       startDate: '', maturityDate: '', note: '', status: 'active',
       withdrawals: [],
       createdAt: new Date().toISOString().slice(0, 10)
     }, data, { id });
-    if (!rec.accountId) rec.accountId = null;
+    if (!rec.accountId) rec.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.setItem('savings', id, rec);
     state.savings.push(rec);
     // Deduct principal from the source account so accounts + savings don't double-count.
-    const acc = rec.accountId ? state.accounts.find((a) => a.id === rec.accountId) : null;
-    if (acc) {
-      acc.balance = Number(acc.balance || 0) - Number(rec.principal || 0);
-      await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
-    }
+    await applyAccountDelta(rec.accountId, -Number(rec.principal || 0));
     emit();
     return rec;
   }
@@ -509,7 +540,7 @@
     const prev = state.savings.find((s) => s.id === id);
     const patch = Object.assign({}, data);
     delete patch.id;
-    if ('accountId' in patch && !patch.accountId) patch.accountId = null;
+    if ('accountId' in patch && !patch.accountId) patch.accountId = CASH_ACCOUNT_ID;
     await FirebaseClient.updateItem('savings', id, patch);
     const i = state.savings.findIndex((s) => s.id === id);
     if (i >= 0) state.savings[i] = Object.assign({}, state.savings[i], patch);
@@ -541,11 +572,7 @@
     await FirebaseClient.updateItem('savings', id, patch);
     Object.assign(sav, patch);
     // Return principal + interest to the source account.
-    const acc = sav.accountId ? state.accounts.find((a) => a.id === sav.accountId) : null;
-    if (acc) {
-      acc.balance = Number(acc.balance || 0) + payout;
-      await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
-    }
+    await applyAccountDelta(sav.accountId, payout);
     emit();
     return sav;
   }
@@ -555,11 +582,7 @@
     // If the savings is still active/matured (not yet withdrawn), refund principal
     // to the source account — otherwise deleting would silently lose that money.
     if (sav && sav.status !== 'withdrawn') {
-      const acc = sav.accountId ? state.accounts.find((a) => a.id === sav.accountId) : null;
-      if (acc) {
-        acc.balance = Number(acc.balance || 0) + Number(sav.principal || 0);
-        await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
-      }
+      await applyAccountDelta(sav.accountId, Number(sav.principal || 0));
     }
     await FirebaseClient.deleteItem('savings', id);
     state.savings = state.savings.filter((s) => s.id !== id);
@@ -571,23 +594,13 @@
   async function addTransfer(data) {
     const id = data.id || genId('tf');
     const rec = Object.assign({ note: '', createdAt: new Date().toISOString() }, data, { id });
-    // Either side may be null — that side represents free-floating cash
-    // (reflected via cashBalance's transferAdjustment, not a direct mutation).
-    if (!rec.fromAccountId) rec.fromAccountId = null;
-    if (!rec.toAccountId) rec.toAccountId = null;
+    if (!rec.fromAccountId) rec.fromAccountId = CASH_ACCOUNT_ID;
+    if (!rec.toAccountId) rec.toAccountId = CASH_ACCOUNT_ID;
     await FirebaseClient.setItem('transfers', id, rec);
     state.transfers.push(rec);
-    const fromAcc = rec.fromAccountId ? state.accounts.find((a) => a.id === rec.fromAccountId) : null;
-    const toAcc = rec.toAccountId ? state.accounts.find((a) => a.id === rec.toAccountId) : null;
     const amount = Number(rec.amount || 0);
-    if (fromAcc) {
-      fromAcc.balance = Number(fromAcc.balance || 0) - amount;
-      await FirebaseClient.updateItem('accounts', fromAcc.id, { balance: fromAcc.balance });
-    }
-    if (toAcc) {
-      toAcc.balance = Number(toAcc.balance || 0) + amount;
-      await FirebaseClient.updateItem('accounts', toAcc.id, { balance: toAcc.balance });
-    }
+    await applyAccountDelta(rec.fromAccountId, -amount);
+    await applyAccountDelta(rec.toAccountId, amount);
     emit();
     return rec;
   }
@@ -596,16 +609,8 @@
     const tf = state.transfers.find((t) => t.id === id);
     if (tf) {
       const amount = Number(tf.amount || 0);
-      const fromAcc = tf.fromAccountId ? state.accounts.find((a) => a.id === tf.fromAccountId) : null;
-      const toAcc = tf.toAccountId ? state.accounts.find((a) => a.id === tf.toAccountId) : null;
-      if (fromAcc) {
-        fromAcc.balance = Number(fromAcc.balance || 0) + amount;
-        await FirebaseClient.updateItem('accounts', fromAcc.id, { balance: fromAcc.balance });
-      }
-      if (toAcc) {
-        toAcc.balance = Number(toAcc.balance || 0) - amount;
-        await FirebaseClient.updateItem('accounts', toAcc.id, { balance: toAcc.balance });
-      }
+      await applyAccountDelta(tf.fromAccountId, amount);
+      await applyAccountDelta(tf.toAccountId, -amount);
     }
     await FirebaseClient.deleteItem('transfers', id);
     state.transfers = state.transfers.filter((t) => t.id !== id);
@@ -705,61 +710,16 @@
     });
   }
 
-  // Cash not held in any tracked account: opening balance + signed sum of
-  // transactions with accountId == null, adjusted for savings funded from cash,
-  // transfers that cross the account ↔ cash boundary, loan payments
-  // received/paid in cash, and loan principals sourced from cash.
-  // Active/matured cash savings subtract their principal (money locked away);
-  // withdrawn cash savings add back their finalInterest (the earnings credited
-  // to cash on payout — the principal returns implicitly as the subtraction
-  // term drops out). Transfers with toAccountId==null moved money INTO cash;
-  // fromAccountId==null moved money OUT of cash. Lending payments with
-  // accountId==null add cash (someone paid us back in cash); borrowing payments
-  // with accountId==null subtract cash (we paid someone back in cash). Cash-
-  // sourced lending subtracts the principal (cash given out); cash-sourced
-  // borrowing adds the principal (cash received). Transactions/savings/
-  // transfers/payments/loans wholly inside tracked accounts are already
-  // reflected in totalAccountsBalance() and are excluded here.
-  function cashBalance() {
-    const unlinked = state.transactions.filter((t) => !t.accountId);
-    const opening = Number(state.settings.openingBalance || 0);
-    const savingsAdjustment = state.savings
-      .filter((s) => !s.accountId)
-      .reduce((sum, s) => {
-        if (savingsStatus(s) === 'withdrawn') return sum + Number(s.finalInterest || 0);
-        return sum - Number(s.principal || 0);
-      }, 0);
-    const transferAdjustment = state.transfers.reduce((sum, tf) => {
-      const amount = Number(tf.amount || 0);
-      if (tf.fromAccountId && !tf.toAccountId) return sum + amount; // account → cash
-      if (!tf.fromAccountId && tf.toAccountId) return sum - amount; // cash → account
-      return sum;
-    }, 0);
-    const sumUnlinkedPayments = (loans) => loans.reduce((sum, l) => {
-      return sum + (l.payments || [])
-        .filter((p) => !p.accountId)
-        .reduce((s, p) => s + Number(p.amount || 0), 0);
-    }, 0);
-    const loanPaymentAdjustment =
-      sumUnlinkedPayments(state.lending) - sumUnlinkedPayments(state.borrowing);
-    const sumUnlinkedPrincipals = (loans) => loans
-      .filter((l) => !l.accountId)
-      .reduce((sum, l) => sum + Number(l.principal || 0), 0);
-    const loanPrincipalAdjustment =
-      sumUnlinkedPrincipals(state.borrowing) - sumUnlinkedPrincipals(state.lending);
-    return opening + totalIncome(unlinked) - totalExpense(unlinked)
-      + savingsAdjustment + transferAdjustment
-      + loanPaymentAdjustment + loanPrincipalAdjustment;
-  }
-
   function currentBalance() {
-    // Authoritative spendable money = accounts + free-floating cash.
-    return totalAccountsBalance() + cashBalance();
+    // Authoritative spendable money — every entity is account-coupled, so the
+    // sum of account balances is the full picture. Cash sits inside the
+    // system-managed cash account like any other.
+    return totalAccountsBalance();
   }
 
   function netWorth() {
-    // Total accessible wealth: current balance (accounts + cash) + money locked
-    // in active savings (principal + accrued interest) + receivables - payables.
+    // Total accessible wealth: current balance + money locked in active
+    // savings (principal + projected interest) + receivables - payables.
     const savingsValue = state.savings
       .filter((s) => savingsStatus(s) !== 'withdrawn')
       .reduce((sum, s) => sum + Number(s.principal || 0) + savingsInterestEarned(s), 0);
@@ -846,6 +806,9 @@
   // ---- Facade -----------------------------------------------------------
 
   const Store = {
+    // Constants
+    CASH_ACCOUNT_ID,
+
     // Lifecycle
     configure,
     disconnect,
@@ -859,7 +822,6 @@
 
     // Settings
     get currency() { return state.settings.currency || DEFAULT_SETTINGS.currency; },
-    get openingBalance() { return Number(state.settings.openingBalance || 0); },
     get settings() { return Object.assign({}, state.settings); },
     updateSettings,
 
@@ -885,7 +847,6 @@
     totalExpense,
     filterByMonth,
     currentBalance,
-    cashBalance,
     totalReceivable,
     totalPayable,
     upcomingDueLoans,

@@ -10,9 +10,8 @@ Single source of truth for every amount shown in the UI. **Always consult this f
 | `totalExpense(txns?)` | `Σ t.amount where t.type === 'expense'` | Defaults to `state.transactions`. |
 | `totalPaid(loan)` | `Σ loan.payments[i].amount` | Works for lending and borrowing. |
 | `loanRemaining(loan)` | `max(0, loan.principal − totalPaid(loan))` | Never negative. |
-| `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types. |
-| `cashBalance()` | `openingBalance + Σ income(accountId==null) − Σ expense(accountId==null) + cashSavingsAdjustment + cashTransferAdjustment + cashLoanPaymentAdjustment + cashLoanPrincipalAdjustment` | Free-floating cash. Includes savings, transfer, loan-payment, and loan-principal adjustments — see below. |
-| `currentBalance()` | `totalAccountsBalance() + cashBalance()` | Spendable money (accounts + cash). Hero number on dashboard. |
+| `totalAccountsBalance()` | `Σ account.balance` | Sum across all account types, including the system cash account. |
+| `currentBalance()` | `totalAccountsBalance()` | Spendable money. Hero number on dashboard. Every entity is account-coupled, so this single sum is the full picture. |
 | `totalReceivable()` | `Σ loanRemaining(l)` over lending | |
 | `totalPayable()` | `Σ loanRemaining(b)` over borrowing | |
 | `personOwedToUser(id)` | `Σ loanRemaining` over lending filtered by `personId` | Used on People page. |
@@ -51,137 +50,68 @@ interest  = round(principal × rate × termDays / 365)
 - Once withdrawn, `savingsInterestEarned` returns the **stored** `finalInterest` (locked in at withdrawal).
 - Integer rounding happens only at the final step.
 
-## Current balance — unified formula
+## Current balance
 
 ```js
-cashSavingsAdjustment = Σ savings.finalInterest  (accountId==null AND status==='withdrawn')
-                      − Σ savings.principal      (accountId==null AND status!=='withdrawn');
-
-cashTransferAdjustment = Σ amount  (fromAccountId!=null AND toAccountId==null)   // account → cash
-                       − Σ amount  (fromAccountId==null AND toAccountId!=null);  // cash → account
-
-cashLoanPaymentAdjustment = Σ payment.amount  (loan in lending  AND payment.accountId==null)   // received in cash
-                          − Σ payment.amount  (loan in borrowing AND payment.accountId==null); // paid in cash
-
-cashLoanPrincipalAdjustment = Σ loan.principal  (loan in borrowing AND loan.accountId==null)   // borrowed in cash
-                            − Σ loan.principal  (loan in lending   AND loan.accountId==null); // lent in cash
-
-cashBalance    = openingBalance
-               + Σ income(accountId==null) − Σ expense(accountId==null)
-               + cashSavingsAdjustment
-               + cashTransferAdjustment
-               + cashLoanPaymentAdjustment
-               + cashLoanPrincipalAdjustment;
-
-currentBalance = totalAccountsBalance() + cashBalance;
+currentBalance = totalAccountsBalance() = Σ account.balance
 ```
 
-Two disjoint buckets feed the hero:
+Single bucket: every entity (transaction, savings, transfer, loan, loan payment) is account-coupled. There is no free-floating cash separate from accounts — the system-managed `acc-cash` account holds physical cash like any other account. Mutations directly update `account.balance`; the live formula is just a sum.
 
-- **Accounts** — money inside tracked accounts. Mutated by `addTransaction` /
-  `updateTransaction` / `deleteTransaction` whenever `accountId` is set, by
-  transfers (when both sides are accounts, or on the account side of an
-  account↔cash transfer), by savings side-effects (when savings has an
-  `accountId`), by loan principals (when `loan.accountId` is set — lending
-  `−=` principal, borrowing `+=` principal), and by loan payments (when
-  `payment.accountId` is set — lending `+=`, borrowing `−=`).
-- **Cash** — money outside any tracked account. Seeded by `openingBalance`,
-  adjusted by every transaction whose `accountId` is `null`, adjusted by
-  cash-funded savings (active/matured principal locks out of cash; withdrawn
-  deposits credit their `finalInterest` back), adjusted by transfers that
-  cross the account ↔ cash boundary (account→cash adds, cash→account subtracts),
-  adjusted by cash-settled loan payments (lending payment adds, borrowing
-  payment subtracts), and adjusted by cash-sourced loan principals (cash
-  lending subtracts, cash borrowing adds).
+`Store.seedCashAccount()` runs on every connect and creates `acc-cash` (id fixed, `balance: 0`) when missing. Idempotent — no-op once the account exists. Forms default to `Store.CASH_ACCOUNT_ID` whenever the user leaves the account field unset.
 
-A stored transaction / savings / transfer / loan / loan-payment without an
-`accountId` field (or where the transfer side is `null`) is treated as cash
-so pre-coupling data keeps working without migration — which retroactively
-corrects net worth: previously the principal sat in both `currentBalance`
-(untouched) and `totalReceivable`/`totalPayable`, double-counting wealth.
-
-### Transaction ↔ account coupling
+### Account ↔ entity coupling (mutations)
 
 | Mutation | Side-effect on accounts |
 |---|---|
-| `addTransaction(data)` | If `data.accountId`, `account.balance += (income? +amount : −amount)` |
-| `updateTransaction(id, patch)` | Rollback prior delta on old account, apply new delta on new account. Handles `accountId` swaps, `amount` changes, `type` flips, and `null ↔ acc-*` transitions. |
-| `deleteTransaction(id)` | If the record had `accountId`, undo its delta. |
-
-Helper: `txnAccountDelta(txn)` returns the signed amount a txn contributes to its
-linked account (`0` when unlinked), so the mutations stay symmetric.
-
-### Loan principal ↔ account coupling
-
-| Mutation | Side-effect on accounts |
-|---|---|
-| `addLoan(kind, data)` | If `data.accountId`, `account.balance += (kind==='lending' ? −principal : +principal)` |
-| `updateLoan(kind, id, patch)` | Rollback prior principal delta on old account, apply new on new account. Handles `accountId` swaps, `principal` changes, and `null ↔ acc-*` transitions. |
+| `addTransaction(data)` | `accounts[data.accountId].balance += (income? +amount : −amount)` |
+| `updateTransaction(id, patch)` | Rollback prior delta on old account, apply new delta on new account. Handles `accountId` swaps, `amount` changes, `type` flips. |
+| `deleteTransaction(id)` | Undo the txn's delta on its account. |
+| `addLoan(kind, data)` | `accounts[data.accountId].balance += (kind==='lending' ? −principal : +principal)` |
+| `updateLoan(kind, id, patch)` | Rollback prior principal delta on old account, apply new on new account. Handles `accountId` swaps and `principal` changes. |
 | `deleteLoan(kind, id)` | Undo the principal delta (refund lending, repay borrowing) **and** unwind every payment's own delta. |
+| `addLoanPayment(kind, loanId, p)` | `accounts[p.accountId].balance += (kind==='lending' ? +amount : −amount)` |
+| `removeLoanPayment(kind, loanId, p)` | Undo the payment's delta on its account. |
+| `addSavings(data)` | `accounts[data.accountId].balance −= principal` |
+| `updateSavings(id, patch)` | Rollback prior principal on old account, deduct new on new account (only when status ≠ `withdrawn`). |
+| `withdrawSavings(id)` | `accounts[sav.accountId].balance += principal + projectedInterest`. Stamps `finalInterest` / `finalAmount`. |
+| `deleteSavings(id)` | Refund principal to source account if not yet withdrawn. |
+| `addTransfer(data)` | `from.balance −= amount; to.balance += amount`. Same-source rejected by `Forms.transferForm`. |
+| `deleteTransfer(id)` | Symmetric reverse of add. |
+| `addAccount` / `updateAccount` | Plain CRUD on `account.balance`; no cross-entity effects. |
+| `deleteAccount(id)` | Throws if `id === Store.CASH_ACCOUNT_ID`. Otherwise removes the account; linked records are left dangling (no cascade today). |
 
-Helper: `loanAccountDelta(kind, loan)` returns the signed amount a loan's
-principal contributes to its linked account (`0` when unlinked); lending
-subtracts (money went out), borrowing adds (money came in).
-
-### Loan payment ↔ account coupling
-
-| Mutation | Side-effect on accounts |
-|---|---|
-| `addLoanPayment(kind, loanId, p)` | If `p.accountId`, `account.balance += (kind==='lending' ? +amount : −amount)` |
-| `removeLoanPayment(kind, loanId, p)` | If `p.accountId`, undo its delta. |
-
-Helper: `paymentAccountDelta(kind, payment)` returns the signed amount a payment
-contributes to its linked account (`0` when unlinked); lending adds, borrowing
-subtracts.
+Helpers (`txnAccountDelta`, `loanAccountDelta`, `paymentAccountDelta`) return the signed delta a record contributes to its account, so the mutations stay symmetric.
 
 ## Net worth (dashboard / analytics)
 
 ```js
-netWorth = currentBalance()                                        // accounts + cash
+netWorth = currentBalance()                                        // Σ account.balance
          + Σ (principal + projectedInterest) over non-withdrawn savings
          + totalReceivable()
          − totalPayable();
 ```
 
-- No double counting: the savings principal is subtracted from its source when
-  created — the source account (`addSavings` side-effect) for account-funded
-  savings, or the `cashBalance` sum for cash-funded ones. Adding principal back
-  via `Σ non-withdrawn savings.principal` then correctly reclassifies it as
-  "locked wealth" instead of "spendable balance".
-- Loans are handled symmetrically: lending subtracts the principal from its
-  source (account or cash) on create, borrowing adds it. `totalReceivable` /
-  `totalPayable` then represent the IOU value on top of the already-adjusted
-  `currentBalance`, so netWorth stays invariant across the full loan lifecycle
-  (lend → receive payments → fully paid).
+- No double counting: the savings principal is subtracted from its source account when created (`addSavings` side-effect). Adding principal back via `Σ non-withdrawn savings.principal` correctly reclassifies it as "locked wealth" instead of "spendable balance".
+- Loans are handled symmetrically: lending subtracts the principal from its source on create, borrowing adds it. `totalReceivable` / `totalPayable` then represent the IOU value on top of the already-adjusted `currentBalance`, so netWorth stays invariant across the full loan lifecycle (lend → receive payments → fully paid).
 - Interest in `netWorth` is **projected at maturity** (same formula as the savings card / hero) — forward-looking wealth on the assumption the deposit is held to term.
-- Cash portion of `currentBalance` is included so untagged transactions and
-  cash-funded savings still count.
 
 ## Transfers
 
-A transfer moves `amount` between two buckets. Each side is either a tracked
-account (`accountId`) or `null` (the free-floating cash bucket).
+A transfer moves `amount` between two accounts. Both sides are required and must be different.
 
 ```js
-// When the side is an account, mutate account.balance directly.
-// When the side is null (cash), the effect lives in cashBalance's
-// transferAdjustment term — no direct mutation needed.
-addTransfer:     if (fromAccount) fromAccount.balance −= amount;
-                 if (toAccount)   toAccount.balance   += amount;
+addTransfer:     fromAccount.balance −= amount;
+                 toAccount.balance   += amount;
 deleteTransfer:  symmetric reverse of the above
 ```
 
-Allowed shapes: account → account, account → cash, cash → account.
-Cash ↔ cash is impossible (same-source check rejects it).
-
 Guarded by `Forms.transferForm`:
-- same-source (including cash ↔ cash) rejected
-- insufficient balance rejected (reads `account.balance` or `cashBalance()` per side)
-- form requires at least one tracked account to open
+- same-source rejected
+- insufficient balance rejected (reads `fromAccount.balance`)
+- form requires at least **two** accounts to open (cash account is always one of them after migration; the other is something the user has created)
 
-Total wealth (`currentBalance`) is invariant across a transfer regardless of
-shape — money shifts between `totalAccountsBalance` and `cashBalance`, but
-their sum is unchanged.
+Total wealth (`currentBalance`) is invariant across a transfer — money shifts between accounts but the sum is unchanged.
 
 ## Delta % (dashboard cards)
 

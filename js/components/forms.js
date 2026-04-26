@@ -57,16 +57,11 @@
     return blank + people.map((p) => `<option value="${p.id}">${escapeHTML(p.name)}</option>`).join('');
   }
 
-  function accountOptionsHTML(accounts, { noneLabel = '' } = {}) {
-    const none = `<option value="">${escapeHTML(noneLabel)}</option>`;
-    return none + accounts.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
+  function accountOptionsHTML(accounts) {
+    return accounts.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
   }
 
-  function escapeHTML(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  const escapeHTML = Fmt.escapeHTML;
 
   // ---- Transaction form -------------------------------------------------
 
@@ -81,7 +76,7 @@
       category: (cats.find((c) => c.type === 'expense') || {}).id,
       date: todayISO(),
       personId: null,
-      accountId: null,
+      accountId: Store.CASH_ACCOUNT_ID,
       note: ''
     };
 
@@ -111,7 +106,7 @@
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
           <label class="form-label">${I18n.t('txn.account')}</label>
-          <select class="select" id="txnAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+          <select class="select" id="txnAccount">${accountOptionsHTML(accounts)}</select>
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t('txn.person')}</label>
@@ -142,7 +137,7 @@
             const category = root.querySelector('#txnCat').value;
             const date = root.querySelector('#txnDate').value;
             const personId = root.querySelector('#txnPerson').value || null;
-            const accountId = root.querySelector('#txnAccount').value || null;
+            const accountId = root.querySelector('#txnAccount').value || Store.CASH_ACCOUNT_ID;
             const note = root.querySelector('#txnNote').value.trim();
 
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
@@ -181,7 +176,7 @@
     // Pre-select current category/person/account after inner markup is rendered
     if (initial.category) catSelect.value = initial.category;
     if (initial.personId) root.querySelector('#txnPerson').value = initial.personId;
-    if (initial.accountId) root.querySelector('#txnAccount').value = initial.accountId;
+    root.querySelector('#txnAccount').value = initial.accountId || Store.CASH_ACCOUNT_ID;
 
     wireAmountInput(root.querySelector('#amountValue'));
   }
@@ -246,7 +241,7 @@
     const initial = existing || {
       personId: people[0] ? people[0].id : '',
       principal: 0,
-      accountId: null,
+      accountId: Store.CASH_ACCOUNT_ID,
       startDate: todayISO(),
       dueDate: todayISO(),
       note: ''
@@ -271,7 +266,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t(accountLabelKey)}</label>
-          <select class="select" id="loanAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+          <select class="select" id="loanAccount">${accountOptionsHTML(accounts)}</select>
         </div>
       </div>
 
@@ -309,7 +304,7 @@
           onClick: async () => {
             const root = document.getElementById('modalRoot');
             const personId = root.querySelector('#loanPerson').value;
-            const accountId = root.querySelector('#loanAccount').value || null;
+            const accountId = root.querySelector('#loanAccount').value || Store.CASH_ACCOUNT_ID;
             const principal = parseAmountInput(root.querySelector('#loanPrincipal').value);
             const startDate = root.querySelector('#loanStart').value;
             const dueDate = root.querySelector('#loanDue').value;
@@ -338,7 +333,7 @@
 
     const root = document.getElementById('modalRoot');
     root.querySelector('#loanPerson').value = initial.personId || '';
-    if (initial.accountId) root.querySelector('#loanAccount').value = initial.accountId;
+    root.querySelector('#loanAccount').value = initial.accountId || Store.CASH_ACCOUNT_ID;
     wireAmountInput(root.querySelector('#loanPrincipal'));
   }
 
@@ -365,7 +360,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t(accountLabelKey)}</label>
-          <select class="select" id="payAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+          <select class="select" id="payAccount">${accountOptionsHTML(accounts)}</select>
         </div>
       </div>
       <div class="form-group">
@@ -387,7 +382,7 @@
             const root = document.getElementById('modalRoot');
             const amount = parseAmountInput(root.querySelector('#payAmount').value);
             const date = root.querySelector('#payDate').value;
-            const accountId = root.querySelector('#payAccount').value || null;
+            const accountId = root.querySelector('#payAccount').value || Store.CASH_ACCOUNT_ID;
             const note = root.querySelector('#payNote').value.trim();
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
@@ -404,7 +399,9 @@
       ]
     });
 
-    wireAmountInput(document.getElementById('modalRoot').querySelector('#payAmount'));
+    const root = document.getElementById('modalRoot');
+    root.querySelector('#payAccount').value = Store.CASH_ACCOUNT_ID;
+    wireAmountInput(root.querySelector('#payAmount'));
   }
 
   // ---- Confirm dialog ---------------------------------------------------
@@ -574,7 +571,7 @@
     const accounts = Store.getAccounts();
     const isEdit = Boolean(existing);
     const initial = existing || {
-      name: '', accountId: accounts[0] ? accounts[0].id : null,
+      name: '', accountId: Store.CASH_ACCOUNT_ID,
       principal: 0, interestRate: 0, termMonths: 6,
       startDate: todayISO(), maturityDate: '', note: ''
     };
@@ -586,7 +583,7 @@
       </div>
       <div class="form-group" style="margin-bottom: var(--space-3)">
         <label class="form-label">${I18n.t('savings.account')}</label>
-        <select class="select" id="savAccount">${accountOptionsHTML(accounts, { noneLabel: I18n.t('txn.account.none') })}</select>
+        <select class="select" id="savAccount">${accountOptionsHTML(accounts)}</select>
       </div>
 
       <div class="amount-input">
@@ -635,7 +632,7 @@
           onClick: async () => {
             const root = document.getElementById('modalRoot');
             const name = root.querySelector('#savName').value.trim();
-            const accountId = root.querySelector('#savAccount').value || null;
+            const accountId = root.querySelector('#savAccount').value || Store.CASH_ACCOUNT_ID;
             const principal = parseAmountInput(root.querySelector('#savPrincipal').value);
             const interestRate = parseFloat(root.querySelector('#savRate').value) || 0;
             const termMonths = parseInt(root.querySelector('#savTerm').value, 10) || 0;
@@ -665,7 +662,7 @@
     });
 
     const root = document.getElementById('modalRoot');
-    if (initial.accountId) root.querySelector('#savAccount').value = initial.accountId;
+    root.querySelector('#savAccount').value = initial.accountId || Store.CASH_ACCOUNT_ID;
     wireAmountInput(root.querySelector('#savPrincipal'));
 
     // Auto-calc maturity date
@@ -687,18 +684,17 @@
 
   function transferForm() {
     const accounts = Store.getAccounts();
-    // Need at least one account — account ↔ cash is allowed; cash ↔ cash is not.
-    if (accounts.length < 1) {
+    // Need at least two accounts — same-source transfers are rejected, so a
+    // single-account ledger has no valid destination.
+    if (accounts.length < 2) {
       Toast.show(I18n.t('transfer.needAccount'));
       return;
     }
 
     function sourceOptionsHTML(accs) {
-      const cashLabel = I18n.t('transfer.cash');
-      const cashBal = Store.cashBalance();
-      const cashOption = `<option value="">${escapeHTML(cashLabel)} (${Fmt.formatAmount(cashBal, { absolute: true })})</option>`;
-      const items = accs.map((a) => `<option value="${a.id}">${escapeHTML(a.name)} (${Fmt.formatAmount(a.balance, { absolute: true })})</option>`).join('');
-      return cashOption + items;
+      return accs.map((a) =>
+        `<option value="${a.id}">${escapeHTML(a.name)} (${Fmt.formatAmount(a.balance, { absolute: true })})</option>`
+      ).join('');
     }
 
     const bodyHTML = `
@@ -737,8 +733,8 @@
           keepOpen: true,
           onClick: async () => {
             const root = document.getElementById('modalRoot');
-            const fromAccountId = root.querySelector('#tfFrom').value || null;
-            const toAccountId = root.querySelector('#tfTo').value || null;
+            const fromAccountId = root.querySelector('#tfFrom').value;
+            const toAccountId = root.querySelector('#tfTo').value;
             const amount = parseAmountInput(root.querySelector('#tfAmount').value);
             const date = root.querySelector('#tfDate').value;
             const note = root.querySelector('#tfNote').value.trim();
@@ -747,9 +743,7 @@
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
 
-            const fromBalance = fromAccountId
-              ? Number((Store.getAccountById(fromAccountId) || {}).balance || 0)
-              : Store.cashBalance();
+            const fromBalance = Number((Store.getAccountById(fromAccountId) || {}).balance || 0);
             if (fromBalance < amount) {
               Toast.show(I18n.t('transfer.insufficientBalance'));
               return;
@@ -768,10 +762,10 @@
       ]
     });
 
-    // Default: first account → (second account, or cash if only one account exists).
+    // Default: first account → second account.
     const root = document.getElementById('modalRoot');
     root.querySelector('#tfFrom').value = accounts[0].id;
-    root.querySelector('#tfTo').value = accounts.length > 1 ? accounts[1].id : '';
+    root.querySelector('#tfTo').value = accounts[1].id;
     wireAmountInput(root.querySelector('#tfAmount'));
   }
 })(window);

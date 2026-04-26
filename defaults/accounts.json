@@ -1,0 +1,12 @@
+[
+  {
+    "id": "acc-cash",
+    "type": "cash",
+    "bankName": "",
+    "accountNumber": "",
+    "balance": 0,
+    "icon": "wallet",
+    "color": 1,
+    "note": ""
+  }
+]
