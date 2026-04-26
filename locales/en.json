@@ -152,6 +152,8 @@
   "loan.status.paid": "Paid",
   "loan.status.overdue": "Overdue",
   "loan.history": "Payment history",
+  "loan.history.recent": "Recent (10)",
+  "loan.history.all": "All",
   "loan.newLoan": "New loan",
   "loan.newDebt": "New debt",
   "loan.filter.all": "All",

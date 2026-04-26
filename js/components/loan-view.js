@@ -118,9 +118,56 @@
     });
   }
 
+  function collectPayments(collection) {
+    const all = [];
+    for (const loan of collection) {
+      const payments = loan.payments || [];
+      for (const p of payments) {
+        all.push({ payment: p, loan });
+      }
+    }
+    all.sort((a, b) => {
+      const byDate = Fmt.parseDate(b.payment.date) - Fmt.parseDate(a.payment.date);
+      if (byDate) return byDate;
+      const ca = a.payment.createdAt || a.payment.id || '';
+      const cb = b.payment.createdAt || b.payment.id || '';
+      return ca < cb ? 1 : ca > cb ? -1 : 0;
+    });
+    return all;
+  }
+
+  function paymentRow(entry, opts) {
+    const { payment, loan } = entry;
+    const person = Store.getPersonById(loan.personId);
+    const account = Store.getAccountById(payment.accountId);
+    const accountLabel = account ? account.name : '?';
+    const personLabel = person ? person.name : '—';
+    const isLending = opts.kind === 'lending';
+    const tone = isLending ? 'income' : 'expense';
+    const icon = isLending ? 'trending-up' : 'trending-down';
+    const sign = isLending ? '+' : '−';
+    return `
+      <div class="txn-row" data-loan-id="${loan.id}" style="cursor:pointer">
+        <span class="circle-icon ${tone}" data-icon="${icon}"></span>
+        <div>
+          <div class="txn-title">${Fmt.escapeHTML(personLabel)}</div>
+          <div class="txn-sub">
+            <span>${Fmt.formatRelative(payment.date, I18n.getLang())}</span>
+            <span>•</span><span>${Fmt.escapeHTML(accountLabel)}</span>
+            ${payment.note ? `<span>•</span><span>${Fmt.escapeHTML(payment.note)}</span>` : ''}
+          </div>
+        </div>
+        <div class="txn-amount ${tone}">${sign}${Fmt.formatAmount(payment.amount, { absolute: true })}</div>
+      </div>`;
+  }
+
   function render(container, opts) {
     const list = applyFilter(opts.collection, opts.filterState);
     const s = summary(opts.collection);
+    if (!opts.filterState.historyView) opts.filterState.historyView = 'recent';
+    const allPayments = collectPayments(opts.collection);
+    const showAll = opts.filterState.historyView === 'all';
+    const visiblePayments = showAll ? allPayments : allPayments.slice(0, 10);
 
     container.innerHTML = `
       <div class="page">
@@ -186,6 +233,21 @@
             ? list.map((l) => loanCard(l, opts)).join('')
             : `<div class="empty" style="grid-column:1/-1"><div class="empty-icon" data-icon="coins"></div><h3>${I18n.t('loan.empty')}</h3></div>`}
         </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">${I18n.t('loan.history')}</div>
+            </div>
+            <div class="chip-group" id="paymentHistoryToggle">
+              <button class="chip ${showAll ? '' : 'is-active'}" data-history-view="recent">${I18n.t('loan.history.recent')}</button>
+              <button class="chip ${showAll ? 'is-active' : ''}" data-history-view="all">${I18n.t('loan.history.all')}</button>
+            </div>
+          </div>
+          ${visiblePayments.length
+            ? `<div class="list" id="paymentHistoryList">${visiblePayments.map((entry) => paymentRow(entry, opts)).join('')}</div>`
+            : `<div class="empty"><div class="empty-icon" data-icon="receipt"></div><p class="text-muted">${I18n.t('loan.noPayments')}</p></div>`}
+        </section>
       </div>
     `;
 
@@ -206,6 +268,25 @@
     container.querySelectorAll('.loan-card').forEach((card) => {
       card.addEventListener('click', () => {
         const id = card.dataset.loanId;
+        const loan = opts.collection.find((l) => l.id === id);
+        if (loan) openDetail(loan, opts);
+      });
+    });
+
+    // Payment history toggle
+    container.querySelectorAll('#paymentHistoryToggle .chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        opts.filterState.historyView = chip.dataset.historyView;
+        render(container, opts);
+        Icons.render(container);
+        I18n.applyTranslations(container);
+      });
+    });
+
+    // Payment row click -> open the loan detail modal
+    container.querySelectorAll('#paymentHistoryList .txn-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.loanId;
         const loan = opts.collection.find((l) => l.id === id);
         if (loan) openDetail(loan, opts);
       });

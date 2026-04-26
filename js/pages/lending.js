@@ -5,7 +5,7 @@
 (function (global) {
   'use strict';
 
-  const filterState = { status: 'all' };
+  const filterState = { status: 'all', historyView: 'recent' };
 
   function render(container) {
     LoanView.render(container, {

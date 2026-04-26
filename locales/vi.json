@@ -152,6 +152,8 @@
   "loan.status.paid": "Đã trả xong",
   "loan.status.overdue": "Quá hạn",
   "loan.history": "Lịch sử trả",
+  "loan.history.recent": "10 gần nhất",
+  "loan.history.all": "Tất cả",
   "loan.newLoan": "Khoản cho vay mới",
   "loan.newDebt": "Khoản đi vay mới",
   "loan.filter.all": "Tất cả",
