@@ -99,6 +99,7 @@
   "dash.recentTxns": "Recent transactions",
   "dash.upcomingDue": "Upcoming & overdue",
   "dash.upcoming.empty": "No upcoming due loans.",
+  "dash.installmentOf": "Installment {n}/{total}",
 
   "txn.type": "Type",
   "txn.all": "All",

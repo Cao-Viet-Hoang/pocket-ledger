@@ -100,10 +100,19 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
 - **Borrowing-only installment fields** (`installmentMonths`, `installmentDay`,
   `installments`) are optional. When `installmentMonths` and `installmentDay`
   are both set, `addLoan` auto-generates `installments[]` by dividing
-  `principal` evenly over `months` (last slot absorbs the remainder so the sum
-  equals `principal` exactly). Due dates step monthly on `installmentDay`
-  starting in the month after `startDate`, capped to the last day of months
-  that don't have that day (e.g. day=31 → Feb 28). Lending ignores these fields.
+  `principal` over `months` using the rounding rule below; the last slot
+  absorbs the remainder so the sum equals `principal` exactly. The first
+  installment is the **next occurrence of `installmentDay` on or after
+  `startDate`** (so `startDate=2026-05-04` with `day=4` places the first slot
+  on 2026-05-04 itself; `startDate=2026-05-05` with `day=4` skips to
+  2026-06-04). Subsequent slots step monthly, capped to the last day of months
+  that don't have that day (e.g. day=31 → Feb 28). Lending ignores these
+  fields.
+- **Rounding rule**: each of the first `months − 1` slots gets `base = ceil(principal / months / 1000) × 1000`
+  (rounded UP to the nearest 1,000 for clean numbers). The last slot is
+  `principal − base × (months − 1)`. Example: 25,108,000 / 12 →
+  11 × 2,093,000 + 1 × 2,085,000. Falls back to plain floor split when the
+  principal is too small to round up (would make the last slot ≤ 0).
 - Each installment slot has its own `id`, `dueDate`, `expectedAmount`, and
   `paymentId`. `paymentId` is `null` when unpaid, or the id of the fulfilling
   `payments[]` entry once paid. The actual payment amount may differ from

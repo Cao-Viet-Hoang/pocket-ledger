@@ -48,14 +48,16 @@
       </div>`;
   }
 
-  function dueRow({ loan, kind, diff, remaining }) {
+  function dueRow({ loan, kind, diff, remaining, installment, installmentIndex, installmentTotal }) {
     const person = Store.getPersonById(loan.personId);
-    const hint = Fmt.formatDueHint(loan.dueDate, I18n.getLang());
+    const dueDate = installment ? installment.dueDate : loan.dueDate;
+    const hint = Fmt.formatDueHint(dueDate, I18n.getLang());
     const avatarClass = person ? `avatar-p${person.color || 1}` : '';
-    const kindLabel =
-      kind === 'lending'
-        ? I18n.t('dash.receivable.hint')
-        : I18n.t('dash.payable.hint');
+    // Show installment context (e.g. "Trả góp 3/12") instead of the generic
+    // payable hint when this row represents a single schedule slot.
+    const kindLabel = installment
+      ? I18n.t('dash.installmentOf', { n: installmentIndex + 1, total: installmentTotal })
+      : (kind === 'lending' ? I18n.t('dash.receivable.hint') : I18n.t('dash.payable.hint'));
     const badgeClass = hint.tone === 'expense' ? 'badge-expense' : (hint.tone === 'warning' ? 'badge-warning' : '');
     return `
       <div class="due-item">

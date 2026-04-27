@@ -99,6 +99,7 @@
   "dash.recentTxns": "Giao dịch gần đây",
   "dash.upcomingDue": "Sắp đến hạn & quá hạn",
   "dash.upcoming.empty": "Không có khoản nào sắp đến hạn.",
+  "dash.installmentOf": "Trả góp {n}/{total}",
 
   "txn.type": "Loại",
   "txn.all": "Tất cả",

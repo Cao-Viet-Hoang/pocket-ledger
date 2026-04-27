@@ -333,11 +333,16 @@
     await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
   }
 
-  // Build an evenly-distributed installment schedule for a borrowing. Each
-  // entry's `expectedAmount` = floor(principal / months); the last entry
-  // absorbs the remainder so the sum equals `principal` exactly. Due dates
-  // start one calendar month after `startDate` and step monthly on `day`,
-  // capped to the last day of months that don't have it (e.g. day=31 → Feb 28).
+  // Build an installment schedule for a borrowing. Each of the first
+  // (months − 1) slots gets `base` = principal/months rounded UP to the
+  // nearest 1,000 — so users see clean numbers (e.g. 25,108,000 / 12 →
+  // 11 × 2,093,000 + 1 × 2,085,000). The last slot absorbs the remainder so
+  // the sum still equals `principal` exactly. Falls back to a plain floor
+  // split when the principal is too small to round up meaningfully (would
+  // make the last slot ≤ 0). The first due date is the next occurrence of
+  // `day` on or after `startDate` (so startDate=2026-05-04 with day=4 places
+  // the first slot on 2026-05-04 itself); subsequent slots step monthly,
+  // capped to the last day of months that don't have `day` (e.g. Feb 28).
   function generateInstallments(principal, months, day, startDate) {
     const p = Number(principal) || 0;
     const m = Number(months) || 0;
@@ -345,13 +350,25 @@
     if (p <= 0 || m <= 0 || !startDate) return [];
     const start = Fmt.parseDate(startDate);
     if (Number.isNaN(start.getTime())) return [];
-    const base = Math.floor(p / m);
-    const remainder = p - base * m;
+    let base = Math.ceil(p / m / 1000) * 1000;
+    let lastAmount = p - base * (m - 1);
+    if (lastAmount <= 0) {
+      base = Math.floor(p / m);
+      lastAmount = p - base * (m - 1);
+    }
+    // Anchor the first installment in the start month (clamped to last day
+    // when day=31 → Feb 28); if it lands before startDate, push to next month.
+    let firstDue = new Date(start.getFullYear(), start.getMonth(), 1);
+    let lastDayOfMonth = new Date(firstDue.getFullYear(), firstDue.getMonth() + 1, 0).getDate();
+    firstDue.setDate(Math.min(d, lastDayOfMonth));
+    if (firstDue < start) {
+      firstDue = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+      lastDayOfMonth = new Date(firstDue.getFullYear(), firstDue.getMonth() + 1, 0).getDate();
+      firstDue.setDate(Math.min(d, lastDayOfMonth));
+    }
     const out = [];
     for (let i = 0; i < m; i++) {
-      // Step to first of the i+1-th month after start (local time), then clamp
-      // the day-of-month to that month's length so day=31 doesn't overflow.
-      const due = new Date(start.getFullYear(), start.getMonth() + i + 1, 1);
+      const due = new Date(firstDue.getFullYear(), firstDue.getMonth() + i, 1);
       const lastDay = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate();
       due.setDate(Math.min(d, lastDay));
       const yyyy = due.getFullYear();
@@ -360,7 +377,7 @@
       out.push({
         id: genId('ins'),
         dueDate: `${yyyy}-${mm}-${dd}`,
-        expectedAmount: base + (i === m - 1 ? remainder : 0),
+        expectedAmount: i === m - 1 ? lastAmount : base,
         paymentId: null
       });
     }
@@ -828,15 +845,42 @@
   function upcomingDueLoans(limitDays = 14) {
     const today = Fmt.today();
     const items = [];
-    const push = (loan, kind) => {
+    // Lending has no installment concept — emit at loan level using the
+    // loan's overall dueDate.
+    state.lending.forEach((loan) => {
       const remaining = loanRemaining(loan);
       if (remaining <= 0) return;
-      const due = Fmt.parseDate(loan.dueDate);
-      const diff = Fmt.daysBetween(today, due);
-      if (diff <= limitDays) items.push({ loan, kind, diff, remaining });
-    };
-    state.lending.forEach((l) => push(l, 'lending'));
-    state.borrowing.forEach((l) => push(l, 'borrowing'));
+      const diff = Fmt.daysBetween(today, Fmt.parseDate(loan.dueDate));
+      if (diff <= limitDays) items.push({ loan, kind: 'lending', diff, remaining });
+    });
+    // Borrowing: when a schedule exists, emit one row per unpaid installment
+    // (each with its own dueDate / expectedAmount) so the dashboard nudges
+    // about each upcoming payment, not the loan as a whole. Without a
+    // schedule, fall back to loan-level like lending.
+    state.borrowing.forEach((loan) => {
+      const schedule = Array.isArray(loan.installments) ? loan.installments : null;
+      if (schedule && schedule.length) {
+        schedule.forEach((ins, idx) => {
+          if (ins.paymentId) return;
+          const diff = Fmt.daysBetween(today, Fmt.parseDate(ins.dueDate));
+          if (diff > limitDays) return;
+          items.push({
+            loan,
+            kind: 'borrowing',
+            diff,
+            remaining: Number(ins.expectedAmount) || 0,
+            installment: ins,
+            installmentIndex: idx,
+            installmentTotal: schedule.length
+          });
+        });
+        return;
+      }
+      const remaining = loanRemaining(loan);
+      if (remaining <= 0) return;
+      const diff = Fmt.daysBetween(today, Fmt.parseDate(loan.dueDate));
+      if (diff <= limitDays) items.push({ loan, kind: 'borrowing', diff, remaining });
+    });
     items.sort((a, b) => a.diff - b.diff);
     return items;
   }
