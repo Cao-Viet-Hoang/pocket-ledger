@@ -15,6 +15,14 @@
  * payment is linked to an account via `accountId` (or `fromAccountId` /
  * `toAccountId`). The system-managed cash account (id `acc-cash`) is always
  * present and acts as the default when the caller leaves the field unset.
+ *
+ * Borrowing installments: a borrowing record can carry `installmentMonths`,
+ * `installmentDay`, and an `installments[]` schedule. `addLoan` generates
+ * the schedule on create; `updateLoan` regenerates it when principal /
+ * months / day / startDate change (resetting all `paymentId` links).
+ * `addLoanPayment(kind, loanId, payment, installmentId?)` accepts an optional
+ * installment id to mark a slot as paid; `removeLoanPayment` un-links
+ * automatically when the linked payment is removed.
  */
 (function (global) {
   'use strict';
@@ -325,6 +333,49 @@
     await FirebaseClient.updateItem('accounts', acc.id, { balance: acc.balance });
   }
 
+  // Build an evenly-distributed installment schedule for a borrowing. Each
+  // entry's `expectedAmount` = floor(principal / months); the last entry
+  // absorbs the remainder so the sum equals `principal` exactly. Due dates
+  // start one calendar month after `startDate` and step monthly on `day`,
+  // capped to the last day of months that don't have it (e.g. day=31 → Feb 28).
+  function generateInstallments(principal, months, day, startDate) {
+    const p = Number(principal) || 0;
+    const m = Number(months) || 0;
+    const d = Number(day) || 1;
+    if (p <= 0 || m <= 0 || !startDate) return [];
+    const start = Fmt.parseDate(startDate);
+    if (Number.isNaN(start.getTime())) return [];
+    const base = Math.floor(p / m);
+    const remainder = p - base * m;
+    const out = [];
+    for (let i = 0; i < m; i++) {
+      // Step to first of the i+1-th month after start (local time), then clamp
+      // the day-of-month to that month's length so day=31 doesn't overflow.
+      const due = new Date(start.getFullYear(), start.getMonth() + i + 1, 1);
+      const lastDay = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate();
+      due.setDate(Math.min(d, lastDay));
+      const yyyy = due.getFullYear();
+      const mm = String(due.getMonth() + 1).padStart(2, '0');
+      const dd = String(due.getDate()).padStart(2, '0');
+      out.push({
+        id: genId('ins'),
+        dueDate: `${yyyy}-${mm}-${dd}`,
+        expectedAmount: base + (i === m - 1 ? remainder : 0),
+        paymentId: null
+      });
+    }
+    return out;
+  }
+
+  // Whether two installment configs would produce the same schedule. Used to
+  // decide if `updateLoan` needs to regenerate.
+  function installmentConfigChanged(prev, next) {
+    return (Number(prev.principal || 0) !== Number(next.principal || 0))
+      || (Number(prev.installmentMonths || 0) !== Number(next.installmentMonths || 0))
+      || (Number(prev.installmentDay || 0) !== Number(next.installmentDay || 0))
+      || (String(prev.startDate || '') !== String(next.startDate || ''));
+  }
+
   async function addTransaction(data) {
     const id = data.id || genId('t');
     const rec = Object.assign(
@@ -403,6 +454,12 @@
       { id }
     );
     if (!rec.accountId) rec.accountId = CASH_ACCOUNT_ID;
+    // Borrowing-only: auto-generate the installment schedule when both
+    // `installmentMonths` and `installmentDay` are provided. Lending ignores
+    // these fields.
+    if (kind === 'borrowing' && Number(rec.installmentMonths) > 0 && Number(rec.installmentDay) > 0) {
+      rec.installments = generateInstallments(rec.principal, rec.installmentMonths, rec.installmentDay, rec.startDate);
+    }
     await FirebaseClient.setItem(kind, id, rec);
     state[kind].push(rec);
     // Principal leaves (lending) or enters (borrowing) the source account so
@@ -417,6 +474,22 @@
     const patch = Object.assign({}, data);
     delete patch.id;
     if ('accountId' in patch && !patch.accountId) patch.accountId = CASH_ACCOUNT_ID;
+    // Borrowing-only: regenerate the installment schedule when principal,
+    // installmentMonths, installmentDay, or startDate changes. Payment links
+    // (`paymentId`) on entries are reset because the new schedule is a fresh
+    // structure — payments still exist in `payments[]`, just unlinked.
+    if (kind === 'borrowing' && prev) {
+      const merged = Object.assign({}, prev, patch);
+      const wantsInstallments = Number(merged.installmentMonths) > 0 && Number(merged.installmentDay) > 0;
+      if (!wantsInstallments) {
+        // User toggled installments off — drop the schedule entirely.
+        if (prev.installments) patch.installments = null;
+      } else if (!prev.installments || installmentConfigChanged(prev, merged)) {
+        patch.installments = generateInstallments(
+          merged.principal, merged.installmentMonths, merged.installmentDay, merged.startDate
+        );
+      }
+    }
     await FirebaseClient.updateItem(kind, id, patch);
     const i = state[kind].findIndex((l) => l.id === id);
     if (i >= 0) state[kind][i] = Object.assign({}, state[kind][i], patch);
@@ -451,7 +524,7 @@
     emit();
   }
 
-  async function addLoanPayment(kind, loanId, payment) {
+  async function addLoanPayment(kind, loanId, payment, installmentId) {
     const prefix = kind === 'lending' ? 'lp' : 'bp';
     const p = Object.assign(
       { id: genId(prefix), note: '', accountId: CASH_ACCOUNT_ID, createdAt: new Date().toISOString() },
@@ -461,6 +534,16 @@
     await FirebaseClient.arrayUnion(kind, loanId, 'payments', [p]);
     const loan = state[kind].find((l) => l.id === loanId);
     if (loan) loan.payments = (loan.payments || []).concat([p]);
+    // If this payment is fulfilling an installment, write the link back so the
+    // schedule shows the entry as paid. Borrowing-only — `installments` only
+    // exists on borrowing records.
+    if (installmentId && loan && loan.installments) {
+      const next = loan.installments.map((ins) =>
+        ins.id === installmentId ? Object.assign({}, ins, { paymentId: p.id }) : ins
+      );
+      loan.installments = next;
+      await FirebaseClient.updateItem(kind, loanId, { installments: next });
+    }
     await applyAccountDelta(p.accountId, paymentAccountDelta(kind, p));
     emit();
     return p;
@@ -470,6 +553,15 @@
     await FirebaseClient.arrayRemove(kind, loanId, 'payments', [payment]);
     const loan = state[kind].find((l) => l.id === loanId);
     if (loan) loan.payments = (loan.payments || []).filter((p) => p.id !== payment.id);
+    // Unlink the schedule entry that pointed at this payment so the slot
+    // becomes available again. No-op for lending (no installments).
+    if (loan && loan.installments && loan.installments.some((ins) => ins.paymentId === payment.id)) {
+      const next = loan.installments.map((ins) =>
+        ins.paymentId === payment.id ? Object.assign({}, ins, { paymentId: null }) : ins
+      );
+      loan.installments = next;
+      await FirebaseClient.updateItem(kind, loanId, { installments: next });
+    }
     await applyAccountDelta(payment.accountId, -paymentAccountDelta(kind, payment));
     emit();
   }

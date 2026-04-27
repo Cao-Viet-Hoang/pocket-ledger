@@ -37,7 +37,7 @@ Every JS file is a self-contained IIFE attached to `window`:
 - `camelCase` for variables, functions, object keys.
 - `UPPER_SNAKE` only for module-level constants (`const LS_CONFIG = 'pl.fb.config';`).
 - Global namespaces: `PascalCase` singular nouns (`Store`, `Forms`, `LoanView`).
-- Entity id prefixes: `t-` transaction, `p-` person, `l-` lending, `b-` borrowing, `lp-`/`bp-` payments, `acc-` account, `sav-` savings, `tf-` transfer. Preserved by `genId(prefix)` in `store.js`.
+- Entity id prefixes: `t-` transaction, `p-` person, `l-` lending, `b-` borrowing, `lp-`/`bp-` payments, `ins-` borrowing installment, `acc-` account, `sav-` savings, `tf-` transfer. Preserved by `genId(prefix)` in `store.js`.
 
 ### Async / errors
 - Mutations in `store.js` are `async` and `await` Firestore calls, then mutate the local cache, then `emit()`.

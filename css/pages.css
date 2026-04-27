@@ -423,6 +423,57 @@
   font-weight: 700;
 }
 
+/* ===== Installment schedule (borrowing trả góp) ===== */
+.installment-list {
+  display: flex;
+  flex-direction: column;
+}
+.installment-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-divider);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.installment-item:last-child { border-bottom: 0; }
+.installment-item:not(.is-paid):hover {
+  background-color: var(--color-surface-2);
+}
+.installment-item.is-paid {
+  cursor: default;
+  opacity: 0.7;
+}
+.installment-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.installment-item.is-paid .installment-status { color: var(--color-income); }
+.installment-status svg { width: 16px; height: 16px; }
+.installment-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.installment-due {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.installment-amount {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
 /* ===== Upcoming due list ===== */
 .due-item {
   display: flex;

@@ -57,7 +57,7 @@ Stored per user at `ledgers/{username}/<collection>/{id}`:
 - `categories` — `{ id, nameKey, type: 'income'|'expense', icon, tone }`
 - `people` — `{ id, name, phone, note, color: 1..6, createdAt }`
 - `transactions` — `{ id, type, amount, category, date, personId, accountId, note, createdAt }` (`accountId` is required — every transaction mutates that account's balance: income `+=`, expense `−=`)
-- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent and required)
+- `lending` / `borrowing` — `{ id, personId, principal, accountId, startDate, dueDate, note, createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }` (the loan's `accountId` is the source/destination for the principal; each payment's `accountId` is independent and required). Borrowing-only optional fields: `installmentMonths`, `installmentDay`, `installments: [{ id, dueDate, expectedAmount, paymentId }]` — auto-generated schedule for monthly trả góp; `paymentId` links a slot to the fulfilling payment (null when unpaid).
 - `accounts` — `{ id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber, balance, icon, color, note, createdAt }`. The system seeds an account with id `acc-cash` (locked from deletion) on first connect; it is the default for any form that doesn't specify one.
 - `savings` — `{ id, name, accountId, principal, interestRate, termMonths, startDate, maturityDate, status, withdrawals, note, createdAt, withdrawnAt?, finalAmount?, finalInterest? }`
 - `transfers` — `{ id, fromAccountId, toAccountId, amount, date, note, createdAt }`
@@ -85,8 +85,8 @@ Dates (`date`, `startDate`, `dueDate`, `maturityDate`) are **`yyyy-mm-dd` string
 - `updateSavings` rebalances when `principal` or `accountId` changes on a non-withdrawn savings (refund old, deduct new). Withdrawn savings are frozen.
 - `addTransfer` / `deleteTransfer` mutate both account balances (`fromAccountId` `−=`, `toAccountId` `+=`). Same-source rejected by `Forms.transferForm`.
 - `addTransaction` / `updateTransaction` / `deleteTransaction` mutate `accounts[accountId].balance` (income `+=`, expense `−=`). `updateTransaction` rolls back the previous effect before applying the new one.
-- `addLoan` mutates `accounts[loan.accountId].balance` (lending `−=` principal, borrowing `+=` principal). `updateLoan` rolls back the prior delta and applies the new one when `principal` or `accountId` changes. `deleteLoan` refunds/returns the principal and unwinds every payment.
-- `addLoanPayment` / `removeLoanPayment` mutate `accounts[payment.accountId].balance` (lending `+=` amount, borrowing `−=` amount).
+- `addLoan` mutates `accounts[loan.accountId].balance` (lending `−=` principal, borrowing `+=` principal). `updateLoan` rolls back the prior delta and applies the new one when `principal` or `accountId` changes. `deleteLoan` refunds/returns the principal and unwinds every payment. For borrowing, `addLoan` also auto-generates `installments[]` when `installmentMonths` and `installmentDay` are set; `updateLoan` regenerates the schedule (resetting all `paymentId` links) when `principal` / `installmentMonths` / `installmentDay` / `startDate` change.
+- `addLoanPayment(kind, loanId, payment, installmentId?)` mutates `accounts[payment.accountId].balance` (lending `+=` amount, borrowing `−=` amount). When `installmentId` is supplied (borrowing-only), the matching schedule slot's `paymentId` is set so the row renders as paid. `removeLoanPayment` reverses both the account delta and the installment link.
 - `deleteAccount` rejects the cash account (`Store.CASH_ACCOUNT_ID`); the UI also hides its delete button.
 
 ## Style rules (non-negotiable)

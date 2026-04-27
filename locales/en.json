@@ -56,6 +56,8 @@
   "form.dateRequired": "Date is required",
   "form.nameRequired": "Name is required",
   "form.personRequired": "Please choose a person",
+  "form.installmentMonthsRequired": "Please enter the number of months",
+  "form.installmentDayRequired": "Please enter the payment day of month",
 
   "toast.saved": "Saved",
   "toast.deleted": "Deleted",
@@ -163,6 +165,12 @@
   "loan.empty": "No loans match this filter.",
   "loan.needPerson": "Add a person first before creating a loan",
   "loan.noPayments": "No payments yet.",
+  "loan.installment.toggle": "Pay in monthly installments",
+  "loan.installment.months": "Number of months",
+  "loan.installment.day": "Payment day of month",
+  "loan.installment.schedule": "Installment schedule",
+  "loan.installment.unpaid": "Unpaid",
+  "loan.installment.paid": "Paid",
 
   "people.totalOwed": "Owes you",
   "people.totalOwe": "You owe them",

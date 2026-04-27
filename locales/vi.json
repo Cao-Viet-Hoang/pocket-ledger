@@ -56,6 +56,8 @@
   "form.dateRequired": "Vui lòng chọn ngày",
   "form.nameRequired": "Vui lòng nhập tên",
   "form.personRequired": "Vui lòng chọn người",
+  "form.installmentMonthsRequired": "Vui lòng nhập số tháng trả góp",
+  "form.installmentDayRequired": "Vui lòng nhập ngày trả mỗi tháng",
 
   "toast.saved": "Đã lưu",
   "toast.deleted": "Đã xóa",
@@ -163,6 +165,12 @@
   "loan.empty": "Không có khoản nào khớp bộ lọc.",
   "loan.needPerson": "Hãy thêm người trước khi tạo khoản vay",
   "loan.noPayments": "Chưa có lần trả nào.",
+  "loan.installment.toggle": "Trả góp hàng tháng",
+  "loan.installment.months": "Số tháng",
+  "loan.installment.day": "Ngày trả mỗi tháng",
+  "loan.installment.schedule": "Lịch trả góp",
+  "loan.installment.unpaid": "Chưa trả",
+  "loan.installment.paid": "Đã trả",
 
   "people.totalOwed": "Họ nợ bạn",
   "people.totalOwe": "Bạn nợ họ",

@@ -319,6 +319,36 @@
           </div>`).join('')
       : `<div class="empty"><div class="empty-icon" data-icon="receipt"></div><p class="text-muted">${I18n.t('loan.noPayments')}</p></div>`;
 
+    // Borrowing-only: show the installment schedule when one was generated.
+    // Each row links to a payment when paid; clicking an unpaid row opens the
+    // payment form with amount/date prefilled from the slot.
+    const installments = (opts.kind === 'borrowing' && Array.isArray(loan.installments)) ? loan.installments : null;
+    const paidCount = installments ? installments.filter((ins) => ins.paymentId).length : 0;
+    const installmentHTML = installments && installments.length ? `
+      <div class="section-header" style="margin-bottom: var(--space-3); margin-top: var(--space-4)">
+        <h3 style="font-size: var(--fs-md)">${I18n.t('loan.installment.schedule')}</h3>
+        <span class="badge">${paidCount}/${installments.length}</span>
+      </div>
+      <div class="installment-list">
+        ${installments.map((ins) => {
+          const isPaid = Boolean(ins.paymentId);
+          const due = Fmt.formatDateShort(ins.dueDate, I18n.getLang());
+          const amount = Fmt.formatAmount(ins.expectedAmount, { absolute: true });
+          const statusKey = isPaid ? 'loan.installment.paid' : 'loan.installment.unpaid';
+          const badgeCls = isPaid ? 'badge-income' : 'badge-warning';
+          return `
+            <div class="installment-item ${isPaid ? 'is-paid' : ''}" data-installment-id="${ins.id}">
+              <span class="installment-status" data-icon="${isPaid ? 'check' : 'clock'}"></span>
+              <div class="installment-main">
+                <div class="installment-due">${due}</div>
+                <div class="installment-amount">${amount}</div>
+              </div>
+              <span class="badge ${badgeCls}">${I18n.t(statusKey)}</span>
+            </div>`;
+        }).join('')}
+      </div>
+    ` : '';
+
     const bodyHTML = `
       <div class="flex items-center gap-3" style="margin-bottom: var(--space-4)">
         <span class="avatar lg avatar-p${person ? person.color : 1}">${Fmt.initials(person ? person.name : '?')}</span>
@@ -350,7 +380,9 @@
 
       <div class="progress" style="margin-bottom: var(--space-4)"><div class="progress-bar ${status === 'paid' ? 'income' : ''}" style="width:${(paid / loan.principal) * 100}%"></div></div>
 
-      <div class="section-header" style="margin-bottom: var(--space-3)">
+      ${installmentHTML}
+
+      <div class="section-header" style="margin-bottom: var(--space-3); margin-top: var(--space-4)">
         <h3 style="font-size: var(--fs-md)">${opts.historyLabel}</h3>
         <span class="badge">${payments.length}</span>
       </div>
@@ -411,6 +443,18 @@
             Modal.close();
           }
         });
+      });
+    });
+
+    // Click an unpaid installment slot -> open the payment form prefilled
+    // with the slot's expected amount + due date. Paid slots are inert.
+    root.querySelectorAll('.installment-item').forEach((row) => {
+      row.addEventListener('click', () => {
+        if (row.classList.contains('is-paid')) return;
+        const insId = row.dataset.installmentId;
+        const ins = (loan.installments || []).find((x) => x.id === insId);
+        if (!ins) return;
+        Forms.paymentForm(opts.kind, loan, ins);
       });
     });
   }

@@ -67,11 +67,11 @@ Single bucket: every entity (transaction, savings, transfer, loan, loan payment)
 | `addTransaction(data)` | `accounts[data.accountId].balance += (income? +amount : −amount)` |
 | `updateTransaction(id, patch)` | Rollback prior delta on old account, apply new delta on new account. Handles `accountId` swaps, `amount` changes, `type` flips. |
 | `deleteTransaction(id)` | Undo the txn's delta on its account. |
-| `addLoan(kind, data)` | `accounts[data.accountId].balance += (kind==='lending' ? −principal : +principal)` |
-| `updateLoan(kind, id, patch)` | Rollback prior principal delta on old account, apply new on new account. Handles `accountId` swaps and `principal` changes. |
+| `addLoan(kind, data)` | `accounts[data.accountId].balance += (kind==='lending' ? −principal : +principal)`. Borrowing also auto-generates `installments[]` when `installmentMonths` + `installmentDay` are set. |
+| `updateLoan(kind, id, patch)` | Rollback prior principal delta on old account, apply new on new account. Handles `accountId` swaps and `principal` changes. Borrowing also regenerates `installments[]` (and resets all `paymentId` links) when `principal` / `installmentMonths` / `installmentDay` / `startDate` change. |
 | `deleteLoan(kind, id)` | Undo the principal delta (refund lending, repay borrowing) **and** unwind every payment's own delta. |
-| `addLoanPayment(kind, loanId, p)` | `accounts[p.accountId].balance += (kind==='lending' ? +amount : −amount)` |
-| `removeLoanPayment(kind, loanId, p)` | Undo the payment's delta on its account. |
+| `addLoanPayment(kind, loanId, p, installmentId?)` | `accounts[p.accountId].balance += (kind==='lending' ? +amount : −amount)`. When `installmentId` is supplied (borrowing-only), the matching schedule slot's `paymentId` is set so the row renders as paid. |
+| `removeLoanPayment(kind, loanId, p)` | Undo the payment's delta on its account. Also clears any installment slot that pointed at the removed payment. |
 | `addSavings(data)` | `accounts[data.accountId].balance −= principal` |
 | `updateSavings(id, patch)` | Rollback prior principal on old account, deduct new on new account (only when status ≠ `withdrawn`). |
 | `withdrawSavings(id)` | `accounts[sav.accountId].balance += principal + projectedInterest`. Stamps `finalInterest` / `finalAmount`. |

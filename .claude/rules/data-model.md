@@ -77,11 +77,18 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   "payments": [
     { "id": "lp-…", "date": "yyyy-mm-dd", "amount": 1000000, "accountId": "acc-vcb",
       "note": "…", "createdAt": "2026-03-01T10:00:00.000Z" }
+  ],
+
+  "installmentMonths": 5,
+  "installmentDay": 15,
+  "installments": [
+    { "id": "ins-…", "dueDate": "2026-03-15", "expectedAmount": 1000000, "paymentId": "bp-…" },
+    { "id": "ins-…", "dueDate": "2026-04-15", "expectedAmount": 1000000, "paymentId": null }
   ]
 }
 ```
 - `payments` is a Firestore array field, mutated via `FirebaseClient.arrayUnion` / `arrayRemove`.
-- Payment id prefixes: `lp-` for lending, `bp-` for borrowing.
+- Payment id prefixes: `lp-` for lending, `bp-` for borrowing. Installment id prefix: `ins-`.
 - Both the loan and each payment carry a `createdAt` ISO timestamp stamped at
   creation time. Used as the same-day tiebreaker in the payment-history list.
   Legacy records get the field backfilled on connect.
@@ -90,14 +97,35 @@ All collections are mirrored into `state.*` in `store.js` on load; mutations wri
   `acc-cash` when the form leaves it unset. Independent of each payment's own `accountId`.
 - Each payment's `accountId` is **required** and mutates that account's `balance`
   (lending `+=`, borrowing `−=`). Defaults to `acc-cash` when unset.
+- **Borrowing-only installment fields** (`installmentMonths`, `installmentDay`,
+  `installments`) are optional. When `installmentMonths` and `installmentDay`
+  are both set, `addLoan` auto-generates `installments[]` by dividing
+  `principal` evenly over `months` (last slot absorbs the remainder so the sum
+  equals `principal` exactly). Due dates step monthly on `installmentDay`
+  starting in the month after `startDate`, capped to the last day of months
+  that don't have that day (e.g. day=31 → Feb 28). Lending ignores these fields.
+- Each installment slot has its own `id`, `dueDate`, `expectedAmount`, and
+  `paymentId`. `paymentId` is `null` when unpaid, or the id of the fulfilling
+  `payments[]` entry once paid. The actual payment amount may differ from
+  `expectedAmount` (flexible payments — trả linh hoạt).
 - **Invariants**:
   - `Σ payments.amount ≤ principal` is expected but not enforced; the math uses `max(0, principal − paid)` so overpayments won't produce negative remaining.
   - `addLoan` applies the principal delta on create (lending `−=`, borrowing
     `+=`). `updateLoan` rolls back the prior delta and applies the new one when
     `principal` or `accountId` changes. `deleteLoan` refunds/returns the
     principal and also unwinds every payment's delta.
-  - `addLoanPayment` applies the payment delta on create; `removeLoanPayment`
-    rolls it back.
+  - `addLoanPayment(kind, loanId, payment, installmentId?)` applies the payment
+    delta on create; when `installmentId` is supplied (borrowing-only), the
+    matching schedule slot's `paymentId` is set so the row renders as paid.
+    `removeLoanPayment` reverses the delta and clears any installment slot that
+    pointed at the removed payment.
+  - **Installment regeneration**: `updateLoan` regenerates `installments[]`
+    (resetting all `paymentId` links to `null`) whenever `principal`,
+    `installmentMonths`, `installmentDay`, or `startDate` changes. Existing
+    `payments[]` entries remain untouched but become unlinked from the new
+    schedule. Setting `installmentMonths` to `null`/`0` drops the schedule
+    entirely. There is no UI to edit a single slot — wholesale regeneration
+    is the only way to reshape the schedule.
 
 ### `accounts`
 ```json

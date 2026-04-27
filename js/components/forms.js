@@ -244,7 +244,9 @@
       accountId: Store.CASH_ACCOUNT_ID,
       startDate: todayISO(),
       dueDate: todayISO(),
-      note: ''
+      note: '',
+      installmentMonths: null,
+      installmentDay: null
     };
 
     if (!people.length) {
@@ -257,6 +259,29 @@
       : (isEdit ? 'action.edit.debt' : 'action.add.debt');
 
     const accountLabelKey = kind === 'lending' ? 'loan.fromAccount' : 'loan.toAccount';
+
+    const isBorrowing = kind === 'borrowing';
+    const installmentEnabled = isBorrowing && Number(initial.installmentMonths) > 0;
+    // Installment block is borrowing-only — lending doesn't model fixed
+    // monthly schedules (the principal flows out, not in).
+    const installmentBlock = isBorrowing ? `
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label" style="display:flex; align-items:center; gap: var(--space-2); cursor:pointer">
+          <input type="checkbox" id="loanInstallmentToggle" ${installmentEnabled ? 'checked' : ''}/>
+          <span>${I18n.t('loan.installment.toggle')}</span>
+        </label>
+      </div>
+      <div id="loanInstallmentFields" class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3); ${installmentEnabled ? '' : 'display:none'}">
+        <div class="form-group">
+          <label class="form-label">${I18n.t('loan.installment.months')}</label>
+          <input type="number" class="input" id="loanInstallmentMonths" min="1" max="360" inputmode="numeric" value="${initial.installmentMonths || ''}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${I18n.t('loan.installment.day')}</label>
+          <input type="number" class="input" id="loanInstallmentDay" min="1" max="31" inputmode="numeric" value="${initial.installmentDay || ''}"/>
+        </div>
+      </div>
+    ` : '';
 
     const bodyHTML = `
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
@@ -286,6 +311,8 @@
         </div>
       </div>
 
+      ${installmentBlock}
+
       <div class="form-group">
         <label class="form-label">${I18n.t('txn.note')}</label>
         <textarea class="textarea" id="loanNote" placeholder="${I18n.t('txn.description')}">${escapeHTML(initial.note || '')}</textarea>
@@ -314,11 +341,28 @@
             if (!principal) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!startDate || !dueDate) { Toast.show(I18n.t('form.dateRequired')); return; }
 
+            const data = { personId, accountId, principal, startDate, dueDate, note };
+
+            if (isBorrowing) {
+              const toggle = root.querySelector('#loanInstallmentToggle');
+              if (toggle && toggle.checked) {
+                const months = parseInt(root.querySelector('#loanInstallmentMonths').value, 10) || 0;
+                const day = parseInt(root.querySelector('#loanInstallmentDay').value, 10) || 0;
+                if (!months) { Toast.show(I18n.t('form.installmentMonthsRequired')); return; }
+                if (!day) { Toast.show(I18n.t('form.installmentDayRequired')); return; }
+                data.installmentMonths = months;
+                data.installmentDay = day;
+              } else {
+                data.installmentMonths = null;
+                data.installmentDay = null;
+              }
+            }
+
             try {
               if (isEdit) {
-                await Store.updateLoan(kind, existing.id, { personId, accountId, principal, startDate, dueDate, note });
+                await Store.updateLoan(kind, existing.id, data);
               } else {
-                await Store.addLoan(kind, { personId, accountId, principal, startDate, dueDate, note, payments: [] });
+                await Store.addLoan(kind, Object.assign({ payments: [] }, data));
               }
               Modal.close();
               Toast.show(I18n.t('toast.saved'));
@@ -335,14 +379,29 @@
     root.querySelector('#loanPerson').value = initial.personId || '';
     root.querySelector('#loanAccount').value = initial.accountId || Store.CASH_ACCOUNT_ID;
     wireAmountInput(root.querySelector('#loanPrincipal'));
+
+    // Reveal installment fields when toggled — borrowing only.
+    if (isBorrowing) {
+      const toggle = root.querySelector('#loanInstallmentToggle');
+      const fields = root.querySelector('#loanInstallmentFields');
+      if (toggle && fields) {
+        toggle.addEventListener('change', () => {
+          fields.style.display = toggle.checked ? '' : 'none';
+        });
+      }
+    }
   }
 
   // ---- Record payment ---------------------------------------------------
 
-  function paymentForm(kind, loan) {
+  function paymentForm(kind, loan, installment) {
     const remaining = Store.loanRemaining(loan);
     const accounts = Store.getAccounts();
     const accountLabelKey = kind === 'lending' ? 'loan.toAccount' : 'loan.fromAccount';
+    // When the user clicked an installment slot, prefill amount + date with
+    // the schedule's expected values so they can confirm or override.
+    const prefillAmount = installment ? Number(installment.expectedAmount) || 0 : 0;
+    const prefillDate = installment ? installment.dueDate : todayISO();
     const bodyHTML = `
       <div class="text-muted" style="margin-bottom: var(--space-3); font-size: var(--fs-sm)">
         ${I18n.t('loan.remaining')}: <strong>${Fmt.formatAmount(remaining, { absolute: true })}</strong>
@@ -350,13 +409,13 @@
 
       <div class="amount-input">
         <span class="currency">${Store.currency.symbol}</span>
-        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="payAmount" autocomplete="off"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="payAmount" autocomplete="off" value="${prefillAmount ? prefillAmount.toLocaleString('en-US') : ''}"/>
       </div>
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
           <label class="form-label">${I18n.t('txn.date')}</label>
-          <input type="date" class="input" id="payDate" value="${todayISO()}"/>
+          <input type="date" class="input" id="payDate" value="${prefillDate}"/>
         </div>
         <div class="form-group">
           <label class="form-label">${I18n.t(accountLabelKey)}</label>
@@ -387,7 +446,7 @@
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
             try {
-              await Store.addLoanPayment(kind, loan.id, { amount, date, accountId, note });
+              await Store.addLoanPayment(kind, loan.id, { amount, date, accountId, note }, installment ? installment.id : null);
               Modal.close();
               Toast.show(I18n.t('toast.saved'));
             } catch (err) {
