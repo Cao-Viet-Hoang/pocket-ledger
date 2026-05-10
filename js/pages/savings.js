@@ -93,8 +93,8 @@
             </div>
           </div>
           <div class="person-actions">
-            ${status === 'active' ? `
-            <button class="btn btn-sm btn-secondary" data-withdraw="${sav.id}" title="${I18n.t('savings.withdraw')}">
+            ${status === 'matured' ? `
+            <button class="btn btn-sm btn-primary" data-withdraw="${sav.id}" title="${I18n.t('savings.withdraw')}">
               <span data-icon="download"></span>
               <span>${I18n.t('savings.withdraw')}</span>
             </button>` : ''}
