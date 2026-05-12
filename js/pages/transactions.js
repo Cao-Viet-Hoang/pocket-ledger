@@ -35,6 +35,7 @@
     const d = Fmt.parseDate(date);
     const today = Fmt.today();
     if (range === 'all') return true;
+    if (range === 'today') return date === isoDate(today);
     if (range === '7d') return Fmt.daysBetween(d, today) <= 7;
     if (range === '30d') return Fmt.daysBetween(d, today) <= 30;
     if (range === 'thisMonth')
@@ -207,6 +208,7 @@
               ${categoryOptions()}
             </select>
             <select id="txnRange" class="select" style="max-width:180px">
+              <option value="today"       ${filterState.range === 'today' ? 'selected' : ''}>${I18n.t('txn.range.today')}</option>
               <option value="7d"          ${filterState.range === '7d' ? 'selected' : ''}>${I18n.t('txn.range.7d')}</option>
               <option value="30d"         ${filterState.range === '30d' ? 'selected' : ''}>${I18n.t('txn.range.30d')}</option>
               <option value="thisMonth"   ${filterState.range === 'thisMonth' ? 'selected' : ''}>${I18n.t('txn.range.thisMonth')}</option>

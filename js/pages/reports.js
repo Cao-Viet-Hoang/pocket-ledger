@@ -37,6 +37,10 @@
     const today = Fmt.today();
     const all = Store.getTransactions();
     if (filterState.range === 'all') return all;
+    if (filterState.range === 'today') {
+      const iso = isoDate(today);
+      return all.filter((t) => t.date === iso);
+    }
     if (filterState.range === 'thisMonth') {
       return all.filter((t) => {
         const d = Fmt.parseDate(t.date);
@@ -73,6 +77,7 @@
   function renderRangeSelect() {
     return `
       <div class="segmented">
+        <button data-range="today"     class="${filterState.range === 'today' ? 'is-active' : ''}">${I18n.t('txn.range.today')}</button>
         <button data-range="7d"        class="${filterState.range === '7d' ? 'is-active' : ''}">${I18n.t('txn.range.7d')}</button>
         <button data-range="30d"       class="${filterState.range === '30d' ? 'is-active' : ''}">${I18n.t('txn.range.30d')}</button>
         <button data-range="thisMonth" class="${filterState.range === 'thisMonth' ? 'is-active' : ''}">${I18n.t('txn.range.thisMonth')}</button>
@@ -99,7 +104,7 @@
         series = [];
       }
     } else {
-      const days = filterState.range === '7d' ? 7 : 30;
+      const days = filterState.range === 'today' ? 1 : filterState.range === '7d' ? 7 : 30;
       series = Store.dailySeries(txns, Math.min(days, 30));
     }
 

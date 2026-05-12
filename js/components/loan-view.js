@@ -44,7 +44,9 @@
     const progress = loan.principal > 0 ? Math.min(100, (paid / loan.principal) * 100) : 0;
     const status = Store.loanStatus(loan);
     const badge = STATUS_BADGE[status] || STATUS_BADGE.unpaid;
-    const due = Fmt.formatDueHint(loan.dueDate, I18n.getLang());
+    const due = status === 'paid'
+      ? { text: Fmt.formatDateShort(loan.dueDate, I18n.getLang()), tone: 'muted' }
+      : Fmt.formatDueHint(loan.dueDate, I18n.getLang());
 
     const progressTone = status === 'paid' ? 'income' : (status === 'overdue' ? 'expense' : '');
 

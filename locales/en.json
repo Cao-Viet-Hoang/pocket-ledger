@@ -114,6 +114,7 @@
   "txn.account": "Account",
   "txn.description": "Description",
   "txn.actions": "Actions",
+  "txn.range.today": "Today",
   "txn.range.7d": "Last 7 days",
   "txn.range.30d": "Last 30 days",
   "txn.range.thisMonth": "This month",
