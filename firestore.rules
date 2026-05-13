@@ -1,0 +1,94 @@
+rules_version = '2';
+
+// Pocket Ledger — Firestore security rules.
+//
+// Architecture note: this app does NOT use Firebase Authentication.
+// Each user provisions their own Firebase project and keeps the API config
+// private. Security is enforced at the project level (API key restrictions,
+// Firebase project access controls) rather than per-document auth checks.
+//
+// Data layout:
+//   ledgers/{username}                       meta-doc  { settings, seededAt }
+//   ledgers/{username}/categories/{id}
+//   ledgers/{username}/people/{id}
+//   ledgers/{username}/transactions/{id}
+//   ledgers/{username}/lending/{id}          payments stored as array field
+//   ledgers/{username}/borrowing/{id}        payments stored as array field
+//   ledgers/{username}/accounts/{id}
+//   ledgers/{username}/savings/{id}
+//   ledgers/{username}/transfers/{id}
+//
+// All writes go through the Store module (js/store.js) which keeps the
+// local cache consistent and emits change events to the UI. Direct Firestore
+// writes outside the Store are not expected and may corrupt the local state.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Ledger root (meta-doc: settings + seededAt) ──────────────────────
+    match /ledgers/{username} {
+      allow read, write: if true;
+
+      // ── Categories ───────────────────────────────────────────────────
+      // { id, nameKey, type: 'income'|'expense', icon, tone }
+      match /categories/{id} {
+        allow read, write: if true;
+      }
+
+      // ── People ───────────────────────────────────────────────────────
+      // { id, name, phone, note, color: 1..6, createdAt }
+      match /people/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Transactions ─────────────────────────────────────────────────
+      // { id, type, amount, category, date, personId, accountId, note, createdAt }
+      match /transactions/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Lending ──────────────────────────────────────────────────────
+      // { id, personId, principal, accountId, startDate, dueDate, note,
+      //   createdAt, payments: [{ id, date, amount, accountId, note, createdAt }] }
+      match /lending/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Borrowing ────────────────────────────────────────────────────
+      // { id, personId, principal, accountId, startDate, dueDate, note,
+      //   createdAt, payments: [...],
+      //   installmentMonths?, installmentDay?,
+      //   installments?: [{ id, dueDate, expectedAmount, paymentId }] }
+      match /borrowing/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Accounts ─────────────────────────────────────────────────────
+      // { id, name, type: 'cash'|'bank'|'ewallet', bankName, accountNumber,
+      //   balance, icon, color, note, createdAt }
+      // acc-cash is system-managed and locked from deletion.
+      match /accounts/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Savings ──────────────────────────────────────────────────────
+      // { id, name, accountId, principal, interestRate, termMonths,
+      //   startDate, maturityDate, status, withdrawals, note, createdAt,
+      //   withdrawnAt?, finalAmount?, finalInterest? }
+      match /savings/{id} {
+        allow read, write: if true;
+      }
+
+      // ── Transfers ────────────────────────────────────────────────────
+      // { id, fromAccountId, toAccountId, amount, date, note, createdAt }
+      match /transfers/{id} {
+        allow read, write: if true;
+      }
+    }
+
+    // Block access to every other collection at the database root.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
