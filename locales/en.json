@@ -264,5 +264,7 @@
   "dash.accounts": "Accounts",
   "dash.savings": "Savings overview",
   "dash.dailyExpense": "Daily spending this month",
-  "dash.dailyExpense.empty": "No spending data yet this month"
+  "dash.dailyExpense.empty": "No spending data yet this month",
+  "dash.dayDetail.empty": "No spending on this day",
+  "dash.dayDetail.total": "Total"
 }

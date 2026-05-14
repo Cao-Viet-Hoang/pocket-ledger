@@ -264,5 +264,7 @@
   "dash.accounts": "Tài khoản",
   "dash.savings": "Tiết kiệm",
   "dash.dailyExpense": "Chi tiêu theo ngày trong tháng",
-  "dash.dailyExpense.empty": "Chưa có dữ liệu chi tiêu trong tháng này"
+  "dash.dailyExpense.empty": "Chưa có dữ liệu chi tiêu trong tháng này",
+  "dash.dayDetail.empty": "Không có khoản chi tiêu nào trong ngày này",
+  "dash.dayDetail.total": "Tổng cộng"
 }

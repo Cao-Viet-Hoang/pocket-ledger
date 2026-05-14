@@ -70,6 +70,62 @@
       </div>`;
   }
 
+  function openDayDetail(y, m, day) {
+    var lang = I18n.getLang();
+    var date = new Date(y, m, day);
+    var dateStr = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    var fullDate = date.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+
+    var txns = Store.getTransactions()
+      .filter(function (t) { return t.date === dateStr && t.type === 'expense'; })
+      .sort(function (a, b) {
+        var ca = a.createdAt || a.id || '';
+        var cb = b.createdAt || b.id || '';
+        return ca < cb ? 1 : ca > cb ? -1 : 0;
+      });
+
+    var total = txns.reduce(function (s, t) { return s + (t.amount || 0); }, 0);
+
+    var rowsHTML = txns.map(function (t) {
+      var cat = Store.getCategoryById(t.category);
+      var person = t.personId ? Store.getPersonById(t.personId) : null;
+      var label = t.note ? Fmt.escapeHTML(t.note) : (cat ? I18n.t(cat.nameKey) : '—');
+      var sub = cat ? I18n.t(cat.nameKey) : '—';
+      var personChip = person
+        ? '<span class="badge" style="background:var(--avatar-p' + (person.color || 1) + '-bg,#e2e8f0);color:var(--color-text)">' + Fmt.escapeHTML(person.name) + '</span>'
+        : '';
+      return '<div class="txn-row">' +
+        '<span class="circle-icon ' + (cat ? cat.tone : 'expense') + '" data-icon="' + (cat ? cat.icon : 'exchange') + '"></span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="txn-title">' + label + '</div>' +
+          '<div class="txn-sub"><span>' + sub + '</span>' + (personChip ? '<span>•</span>' + personChip : '') + '</div>' +
+        '</div>' +
+        '<div class="txn-amount expense">-' + Fmt.formatAmount(t.amount, { absolute: true }) + '</div>' +
+      '</div>';
+    }).join('');
+
+    var totalRow = txns.length > 1
+      ? '<div style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0 0;border-top:1px solid var(--color-border);margin-top:var(--space-2)">' +
+          '<span class="text-muted" style="font-size:var(--fs-sm)">' + I18n.t('dash.dayDetail.total') + '</span>' +
+          '<span class="txn-amount expense" style="font-size:var(--fs-lg)">-' + Fmt.formatAmount(total, { absolute: true }) + '</span>' +
+        '</div>'
+      : '';
+
+    var emptyHTML = '<div class="empty"><div class="empty-icon" data-icon="check"></div>' +
+      '<p class="text-muted" data-i18n="dash.dayDetail.empty"></p></div>';
+
+    Modal.open({
+      title: fullDate,
+      subtitle: total > 0 ? '-' + Fmt.formatAmount(total, { absolute: true }) : '',
+      bodyHTML: txns.length
+        ? '<div class="list">' + rowsHTML + '</div>' + totalRow
+        : emptyHTML,
+      actions: [{ label: I18n.t('action.close'), variant: 'secondary' }]
+    });
+  }
+
   function wireExpenseChart(container, y, m) {
     var svg = container.querySelector('.expense-day-bars');
     if (!svg) return;
@@ -89,6 +145,7 @@
           '<span class="tip-amount">' + Fmt.formatAmount(val, { absolute: true }) + '</span>' +
           '<span class="tip-day">' + dateLabel + '</span>';
         tip.style.display = 'flex';
+        rect.style.cursor = val > 0 ? 'pointer' : 'default';
 
         var hl = svg.querySelector('.bar-col-hl[data-day="' + rect.dataset.day + '"]');
         if (hl) hl.setAttribute('opacity', '0.1');
@@ -109,6 +166,7 @@
       });
       rect.addEventListener('mouseleave', function () {
         tip.style.display = 'none';
+        rect.style.cursor = 'default';
 
         var hl = svg.querySelector('.bar-col-hl[data-day="' + rect.dataset.day + '"]');
         if (hl) hl.setAttribute('opacity', '0');
@@ -118,6 +176,11 @@
           vis.removeAttribute('stroke');
           vis.removeAttribute('stroke-width');
         }
+      });
+      rect.addEventListener('click', function () {
+        if (parseInt(rect.dataset.val, 10) === 0) return;
+        tip.style.display = 'none';
+        openDayDetail(y, m, parseInt(rect.dataset.day, 10));
       });
     });
   }
