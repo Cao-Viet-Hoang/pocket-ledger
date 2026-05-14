@@ -322,6 +322,35 @@
 .chart-svg.donut {
   height: 240px;
 }
+.chart-svg.expense-day-bars {
+  height: 180px;
+}
+.expense-chart-wrap {
+  position: relative;
+}
+.exp-day-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  background: #1e293b;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.28);
+  white-space: nowrap;
+}
+.exp-day-tooltip .tip-amount {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: #fca5a5;
+}
+.exp-day-tooltip .tip-day {
+  font-size: var(--fs-xs);
+  color: #94a3b8;
+}
 .chart-legend {
   display: flex;
   flex-direction: column;

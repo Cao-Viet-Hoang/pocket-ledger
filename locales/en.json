@@ -262,5 +262,7 @@
   "form.interestRequired": "Interest rate is required",
   "form.termRequired": "Term is required",
   "dash.accounts": "Accounts",
-  "dash.savings": "Savings overview"
+  "dash.savings": "Savings overview",
+  "dash.dailyExpense": "Daily spending this month",
+  "dash.dailyExpense.empty": "No spending data yet this month"
 }

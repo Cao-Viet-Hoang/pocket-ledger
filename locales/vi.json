@@ -262,5 +262,7 @@
   "form.interestRequired": "Vui lòng nhập lãi suất",
   "form.termRequired": "Vui lòng nhập kỳ hạn",
   "dash.accounts": "Tài khoản",
-  "dash.savings": "Tiết kiệm"
+  "dash.savings": "Tiết kiệm",
+  "dash.dailyExpense": "Chi tiêu theo ngày trong tháng",
+  "dash.dailyExpense.empty": "Chưa có dữ liệu chi tiêu trong tháng này"
 }

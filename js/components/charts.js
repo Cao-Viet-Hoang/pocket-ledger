@@ -181,6 +181,71 @@
       </svg>`;
   }
 
+  // ---------- Single-series expense bar chart (one bar per day) ----------
+  // width=900 matches typical full-width card so font-size "9" scales ~1:1.
+  function expenseBars(series, { width = 900, height = 180, todayIndex = -1 } = {}) {
+    if (!series.length) return '';
+    const padL = 48, padR = 12, padT = 14, padB = 26;
+    const chartW = width - padL - padR;
+    const chartH = height - padT - padB;
+
+    const max = Math.max(1, ...series.map((d) => d.value || 0));
+    const niceMax = niceScale(max);
+    const groupW = chartW / series.length;
+    const barW = Math.max(2, Math.min(16, groupW - 2));
+
+    const ticks = [0, 0.5, 1].map((p) => ({
+      y: padT + chartH - p * chartH,
+      label: Fmt.formatCompact(p * niceMax)
+    }));
+
+    const gridLines = ticks
+      .map((t) => `<line x1="${padL}" x2="${width - padR}" y1="${t.y}" y2="${t.y}" stroke="#eef2f6"/>`)
+      .join('');
+
+    const tickLabels = ticks
+      .map((t) => `<text x="${padL - 6}" y="${t.y + 4}" text-anchor="end" font-size="9" fill="#94a3b8">${t.label}</text>`)
+      .join('');
+
+    const barsHTML = series
+      .map((d, i) => {
+        const h = ((d.value || 0) / niceMax) * chartH;
+        const hx = (padL + i * groupW).toFixed(1);
+        const colW = groupW.toFixed(1);
+        const bx = (padL + i * groupW + (groupW - barW) / 2).toFixed(1);
+        const by = (padT + chartH - Math.max(0, h)).toFixed(1);
+        const isToday = i === todayIndex;
+        const color = isToday ? '#dc2626' : '#ef4444';
+        const baseOpacity = isToday ? '1' : '0.72';
+        // Column background highlight — toggled by JS on hover
+        const colHl = `<rect class="bar-col-hl" data-day="${i + 1}" x="${hx}" y="${padT}" width="${colW}" height="${chartH}" rx="3" fill="#ef4444" opacity="0"/>`;
+        // Visible bar with class for JS targeting; data-base-opacity lets JS restore after hover
+        const bar = h >= 1
+          ? `<rect class="bar-vis" data-day="${i + 1}" data-base-opacity="${baseOpacity}" x="${bx}" y="${by}" width="${barW}" height="${h.toFixed(1)}" rx="3" fill="${color}" opacity="${baseOpacity}"/>`
+          : '';
+        // Invisible hit area on top — full column width for easy hover
+        const hit = `<rect class="bar-hit" x="${hx}" y="${padT}" width="${colW}" height="${chartH}" fill="transparent" style="cursor:default" data-day="${i + 1}" data-val="${d.value || 0}"/>`;
+        return colHl + bar + hit;
+      })
+      .join('');
+
+    const xLabels = series
+      .map((d, i) => {
+        if (!d.label) return '';
+        const gx = (padL + i * groupW + groupW / 2).toFixed(1);
+        return `<text x="${gx}" y="${height - 5}" text-anchor="middle" font-size="9" fill="#94a3b8">${escapeHtml(d.label)}</text>`;
+      })
+      .join('');
+
+    return `
+      <svg class="chart-svg expense-day-bars" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" xmlns="${NS}">
+        ${gridLines}
+        ${tickLabels}
+        ${barsHTML}
+        ${xLabels}
+      </svg>`;
+  }
+
   function niceScale(maxVal) {
     if (maxVal <= 0) return 1;
     const pow = Math.pow(10, Math.floor(Math.log10(maxVal)));
@@ -193,5 +258,5 @@
     return nice * pow;
   }
 
-  global.Charts = { bars, donut, line, COLORS };
+  global.Charts = { bars, donut, line, expenseBars, COLORS };
 })(window);

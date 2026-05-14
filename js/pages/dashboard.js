@@ -70,6 +70,58 @@
       </div>`;
   }
 
+  function wireExpenseChart(container, y, m) {
+    var svg = container.querySelector('.expense-day-bars');
+    if (!svg) return;
+    var wrap = svg.closest('.expense-chart-wrap');
+    if (!wrap) return;
+    var tip = wrap.querySelector('.exp-day-tooltip');
+    if (!tip) return;
+
+    svg.querySelectorAll('.bar-hit').forEach(function (rect) {
+      rect.addEventListener('mouseenter', function () {
+        var day = parseInt(rect.dataset.day, 10);
+        var val = parseInt(rect.dataset.val, 10);
+        var date = new Date(y, m, day);
+        var lang = I18n.getLang();
+        var dateLabel = date.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-US', { day: 'numeric', month: 'short' });
+        tip.innerHTML =
+          '<span class="tip-amount">' + Fmt.formatAmount(val, { absolute: true }) + '</span>' +
+          '<span class="tip-day">' + dateLabel + '</span>';
+        tip.style.display = 'flex';
+
+        var hl = svg.querySelector('.bar-col-hl[data-day="' + rect.dataset.day + '"]');
+        if (hl) hl.setAttribute('opacity', '0.1');
+        var vis = svg.querySelector('.bar-vis[data-day="' + rect.dataset.day + '"]');
+        if (vis) {
+          vis.setAttribute('opacity', '1');
+          vis.setAttribute('stroke', '#fff');
+          vis.setAttribute('stroke-width', '1.5');
+        }
+      });
+      rect.addEventListener('mousemove', function (e) {
+        var wrapRect = wrap.getBoundingClientRect();
+        var x = e.clientX - wrapRect.left;
+        var y2 = e.clientY - wrapRect.top;
+        var tipW = tip.offsetWidth || 120;
+        tip.style.left = (x + tipW + 20 > wrapRect.width ? x - tipW - 8 : x + 12) + 'px';
+        tip.style.top = Math.max(4, y2 - 52) + 'px';
+      });
+      rect.addEventListener('mouseleave', function () {
+        tip.style.display = 'none';
+
+        var hl = svg.querySelector('.bar-col-hl[data-day="' + rect.dataset.day + '"]');
+        if (hl) hl.setAttribute('opacity', '0');
+        var vis = svg.querySelector('.bar-vis[data-day="' + rect.dataset.day + '"]');
+        if (vis) {
+          vis.setAttribute('opacity', vis.getAttribute('data-base-opacity') || '0.72');
+          vis.removeAttribute('stroke');
+          vis.removeAttribute('stroke-width');
+        }
+      });
+    });
+  }
+
   function render(container) {
     const today = Fmt.today();
     const y = today.getFullYear();
@@ -113,6 +165,20 @@
 
     const accounts = Store.getAccounts();
     const activeSavings = Store.getSavings().filter((s) => Store.savingsStatus(s) !== 'withdrawn');
+
+    // Build daily expense series for current month
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const todayDay = today.getDate();
+    const dailySeries = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayExpense = thisMonthTxns
+        .filter((t) => t.date === dateStr && t.type === 'expense')
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+      const showLabel = d === 1 || d % 5 === 0 || d === daysInMonth;
+      dailySeries.push({ value: dayExpense, label: showLabel ? String(d) : null });
+    }
+    const todayIndex = todayDay - 1;
 
     container.innerHTML = `
       <div class="page">
@@ -202,6 +268,25 @@
             icon: 'percent',
             tone: 'income'
           })}
+        </section>
+
+        <section class="chart-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" data-i18n="dash.dailyExpense"></div>
+              <div class="card-subtitle">${today.toLocaleString(I18n.getLang() === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })}</div>
+            </div>
+            <div class="txn-amount expense">${expenseMonth > 0 ? Fmt.formatAmount(expenseMonth, { absolute: true }) : ''}</div>
+          </div>
+          <div class="expense-chart-wrap">
+            ${expenseMonth > 0
+              ? Charts.expenseBars(dailySeries, { todayIndex })
+              : `<div class="empty" style="padding:var(--space-6) 0">
+                  <div class="empty-icon" data-icon="trending-down"></div>
+                  <p class="text-muted" data-i18n="dash.dailyExpense.empty"></p>
+                 </div>`}
+            <div class="exp-day-tooltip" style="display:none"></div>
+          </div>
         </section>
 
         <section class="grid grid-2-1">
@@ -303,6 +388,8 @@
         </section>
       </div>
     `;
+
+    wireExpenseChart(container, y, m);
   }
 
   global.Pages = global.Pages || {};
