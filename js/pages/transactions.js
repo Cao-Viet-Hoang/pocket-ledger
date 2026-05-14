@@ -302,6 +302,7 @@
           from: filterState.customFrom,
           to: filterState.customTo,
           onConfirm: ({ from, to }) => {
+            filterState.range = 'custom';
             filterState.customFrom = from;
             filterState.customTo = to;
             render(container);
