@@ -906,6 +906,17 @@
       .sort((a, b) => b.value - a.value);
   }
 
+  function incomeByCategory(transactions) {
+    const txns = (transactions || state.transactions).filter((t) => t.type === 'income');
+    const byCat = new Map();
+    for (const t of txns) {
+      byCat.set(t.category, (byCat.get(t.category) || 0) + Number(t.amount || 0));
+    }
+    return Array.from(byCat.entries())
+      .map(([id, value]) => ({ category: getCategoryById(id), value }))
+      .sort((a, b) => b.value - a.value);
+  }
+
   function dailySeries(transactions, daysOrOptions = 30) {
     let days, end;
     if (typeof daysOrOptions === 'number') {
@@ -990,6 +1001,7 @@
     personOwedToUser,
     personUserOwes,
     spendingByCategory,
+    incomeByCategory,
     dailySeries,
     totalAccountsBalance,
     netWorth,
