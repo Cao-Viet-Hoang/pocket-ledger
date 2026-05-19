@@ -1,6 +1,6 @@
 /**
  * Transactions page.
- * - Search, type filter (all/income/expense), category filter
+ * - Search, type filter (all/income/expense), category filter, account filter
  * - Date range (presets + custom from/to), sort
  * - Table of transactions with edit/delete actions
  */
@@ -23,6 +23,7 @@
     query: '',
     type: 'all',         // all | income | expense
     category: 'all',
+    account: 'all',
     range: 'thisMonth',  // 7d | 30d | thisMonth | lastMonth | all | custom
     customFrom: defaultFrom(),
     customTo: isoDate(Fmt.today()),
@@ -59,6 +60,7 @@
     let list = Store.getTransactions().filter((t) => {
       if (filterState.type !== 'all' && t.type !== filterState.type) return false;
       if (filterState.category !== 'all' && t.category !== filterState.category) return false;
+      if (filterState.account !== 'all' && t.accountId !== filterState.account) return false;
       if (!rangeFilter(t.date, filterState.range)) return false;
       if (q) {
         const cat = Store.getCategoryById(t.category);
@@ -153,6 +155,13 @@
     return opts.join('');
   }
 
+  function accountOptions() {
+    const accounts = Store.getAccounts();
+    const opts = [`<option value="all">${I18n.t('txn.all')}</option>`];
+    for (const a of accounts) opts.push(`<option value="${a.id}">${escapeHTML(a.name)}</option>`);
+    return opts.join('');
+  }
+
   function render(container) {
     const list = applyFilters();
     const totalIn = Store.totalIncome(list);
@@ -194,7 +203,7 @@
         </section>
 
         <section class="card">
-          <div class="toolbar">
+          <div class="toolbar toolbar-primary">
             <div class="input-with-icon search">
               <span data-icon="search"></span>
               <input id="txnSearch" class="input" type="search" value="${escapeHTML(filterState.query)}" placeholder="${I18n.t('action.search')}"/>
@@ -204,8 +213,17 @@
               <button data-type="income"  class="${filterState.type === 'income' ? 'is-active' : ''}">${I18n.t('txn.income')}</button>
               <button data-type="expense" class="${filterState.type === 'expense' ? 'is-active' : ''}">${I18n.t('txn.expense')}</button>
             </div>
+            <button class="btn btn-primary" id="addTxnBtn">
+              <span data-icon="plus"></span>
+              <span>${I18n.t('action.add')}</span>
+            </button>
+          </div>
+          <div class="toolbar toolbar-filters">
             <select id="txnCategory" class="select" style="max-width:180px">
               ${categoryOptions()}
+            </select>
+            <select id="txnAccount" class="select" style="max-width:180px">
+              ${accountOptions()}
             </select>
             <select id="txnRange" class="select" style="max-width:180px">
               <option value="today"       ${filterState.range === 'today' ? 'selected' : ''}>${I18n.t('txn.range.today')}</option>
@@ -226,10 +244,6 @@
               <option value="amountDesc" ${filterState.sort === 'amountDesc' ? 'selected' : ''}>${I18n.t('txn.sort.amountDesc')}</option>
               <option value="amountAsc"  ${filterState.sort === 'amountAsc' ? 'selected' : ''}>${I18n.t('txn.sort.amountAsc')}</option>
             </select>
-            <button class="btn btn-primary" id="addTxnBtn">
-              <span data-icon="plus"></span>
-              <span>${I18n.t('action.add')}</span>
-            </button>
           </div>
           <div class="table-scroll">
             <table class="table">
@@ -254,6 +268,9 @@
     const catSelect = container.querySelector('#txnCategory');
     if (catSelect) catSelect.value = filterState.category;
 
+    const accountSelect = container.querySelector('#txnAccount');
+    if (accountSelect) accountSelect.value = filterState.account;
+
     const searchInput = container.querySelector('#txnSearch');
     searchInput.addEventListener('input', (e) => {
       filterState.query = e.target.value;
@@ -268,6 +285,10 @@
     });
     container.querySelector('#txnCategory').addEventListener('change', (e) => {
       filterState.category = e.target.value;
+      updateRows(container);
+    });
+    container.querySelector('#txnAccount').addEventListener('change', (e) => {
+      filterState.account = e.target.value;
       updateRows(container);
     });
     const rangeSelect = container.querySelector('#txnRange');
