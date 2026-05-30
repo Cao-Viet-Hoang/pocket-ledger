@@ -63,6 +63,17 @@
 
   const escapeHTML = Fmt.escapeHTML;
 
+  function getDefaultTransactionCategory(cats, type) {
+    const preferredIds = {
+      expense: 'food'
+    };
+    const filteredCats = cats.filter((c) => c.type === type);
+    if (!filteredCats.length) return '';
+    const preferredId = preferredIds[type];
+    if (preferredId && filteredCats.some((c) => c.id === preferredId)) return preferredId;
+    return filteredCats[0].id;
+  }
+
   // ---- Transaction form -------------------------------------------------
 
   function transactionForm(existing) {
@@ -73,7 +84,7 @@
     const initial = existing || {
       type: 'expense',
       amount: 0,
-      category: (cats.find((c) => c.type === 'expense') || {}).id,
+      category: getDefaultTransactionCategory(cats, 'expense'),
       date: todayISO(),
       personId: null,
       accountId: Store.CASH_ACCOUNT_ID,
@@ -170,6 +181,7 @@
         selectedType = b.dataset.type;
         const filtered = cats.filter((c) => c.type === selectedType);
         catSelect.innerHTML = categoryOptionsHTML(filtered);
+        catSelect.value = getDefaultTransactionCategory(cats, selectedType);
       });
     });
 
