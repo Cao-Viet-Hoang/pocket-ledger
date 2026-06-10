@@ -173,6 +173,9 @@
   "loan.installment.schedule": "Lịch trả góp",
   "loan.installment.unpaid": "Chưa trả",
   "loan.installment.paid": "Đã trả",
+  "loan.installment.label": "Kỳ {n}",
+  "loan.installment.select": "Kỳ trả góp",
+  "loan.installment.none": "Không gắn với kỳ nào",
 
   "people.totalOwed": "Họ nợ bạn",
   "people.totalOwe": "Bạn nợ họ",

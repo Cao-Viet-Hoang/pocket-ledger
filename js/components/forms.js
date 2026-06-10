@@ -61,6 +61,24 @@
     return accounts.map((a) => `<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
   }
 
+  // Options for the borrowing installment selector in the payment form. A
+  // leading "none" entry keeps the payment unlinked; already-paid slots are
+  // disabled (unless they are the one currently being edited).
+  function installmentOptionsHTML(installments, selectedId) {
+    const none = `<option value="" ${selectedId ? '' : 'selected'}>${I18n.t('loan.installment.none')}</option>`;
+    const rows = installments.map((ins, idx) => {
+      const isSelected = ins.id === selectedId;
+      const isPaid = Boolean(ins.paymentId);
+      const label = I18n.t('loan.installment.label', { n: idx + 1 });
+      const due = Fmt.formatDateShort(ins.dueDate, I18n.getLang());
+      const amount = Fmt.formatAmount(ins.expectedAmount, { absolute: true });
+      const paidSuffix = isPaid ? ` · ${I18n.t('loan.installment.paid')}` : '';
+      const disabled = isPaid && !isSelected ? 'disabled' : '';
+      return `<option value="${ins.id}" ${isSelected ? 'selected' : ''} ${disabled}>${label} — ${due} (${amount})${paidSuffix}</option>`;
+    }).join('');
+    return none + rows;
+  }
+
   const escapeHTML = Fmt.escapeHTML;
 
   function getDefaultTransactionCategory(cats, type) {
@@ -410,10 +428,23 @@
     const remaining = Store.loanRemaining(loan);
     const accounts = Store.getAccounts();
     const accountLabelKey = kind === 'lending' ? 'loan.toAccount' : 'loan.fromAccount';
+    // Borrowing loans may carry a trả-góp schedule. Surface a selector so a
+    // payment can be linked to a specific installment slot (marking it paid)
+    // even when the form is opened from the generic "Add payment" button.
+    const installments = (kind === 'borrowing' && Array.isArray(loan.installments) && loan.installments.length)
+      ? loan.installments
+      : null;
+    const selectedInstallmentId = installment ? installment.id : '';
     // When the user clicked an installment slot, prefill amount + date with
     // the schedule's expected values so they can confirm or override.
     const prefillAmount = installment ? Number(installment.expectedAmount) || 0 : 0;
     const prefillDate = installment ? installment.dueDate : todayISO();
+    const installmentHTML = installments ? `
+      <div class="form-group" style="margin-bottom: var(--space-3)">
+        <label class="form-label">${I18n.t('loan.installment.select')}</label>
+        <select class="select" id="payInstallment">${installmentOptionsHTML(installments, selectedInstallmentId)}</select>
+      </div>
+    ` : '';
     const bodyHTML = `
       <div class="text-muted" style="margin-bottom: var(--space-3); font-size: var(--fs-sm)">
         ${I18n.t('loan.remaining')}: <strong>${Fmt.formatAmount(remaining, { absolute: true })}</strong>
@@ -423,6 +454,8 @@
         <span class="currency">${Store.currency.symbol}</span>
         <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" id="payAmount" autocomplete="off" value="${prefillAmount ? prefillAmount.toLocaleString('en-US') : ''}"/>
       </div>
+
+      ${installmentHTML}
 
       <div class="grid grid-2" style="gap: var(--space-3); margin-bottom: var(--space-3)">
         <div class="form-group">
@@ -455,10 +488,14 @@
             const date = root.querySelector('#payDate').value;
             const accountId = root.querySelector('#payAccount').value || Store.CASH_ACCOUNT_ID;
             const note = root.querySelector('#payNote').value.trim();
+            const installmentSelect = root.querySelector('#payInstallment');
+            const installmentId = installmentSelect
+              ? (installmentSelect.value || null)
+              : (installment ? installment.id : null);
             if (!amount) { Toast.show(I18n.t('form.amountRequired')); return; }
             if (!date) { Toast.show(I18n.t('form.dateRequired')); return; }
             try {
-              await Store.addLoanPayment(kind, loan.id, { amount, date, accountId, note }, installment ? installment.id : null);
+              await Store.addLoanPayment(kind, loan.id, { amount, date, accountId, note }, installmentId);
               Modal.close();
               Toast.show(I18n.t('toast.saved'));
             } catch (err) {
@@ -471,8 +508,23 @@
     });
 
     const root = document.getElementById('modalRoot');
-    root.querySelector('#payAccount').value = Store.CASH_ACCOUNT_ID;
+    // Default the payment's account to the loan's linked account (the natural
+    // source/destination for repaying it); fall back to cash when unset.
+    root.querySelector('#payAccount').value = loan.accountId || Store.CASH_ACCOUNT_ID;
     wireAmountInput(root.querySelector('#payAmount'));
+
+    // Selecting an installment prefills amount + date from that slot so the
+    // user only has to confirm. Picking "none" leaves the current values.
+    const installmentSelect = root.querySelector('#payInstallment');
+    if (installmentSelect && installments) {
+      installmentSelect.addEventListener('change', () => {
+        const ins = installments.find((x) => x.id === installmentSelect.value);
+        if (!ins) return;
+        const amountInput = root.querySelector('#payAmount');
+        amountInput.value = (Number(ins.expectedAmount) || 0).toLocaleString('en-US');
+        root.querySelector('#payDate').value = ins.dueDate;
+      });
+    }
   }
 
   // ---- Confirm dialog ---------------------------------------------------

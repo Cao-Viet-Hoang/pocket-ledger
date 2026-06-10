@@ -173,6 +173,9 @@
   "loan.installment.schedule": "Installment schedule",
   "loan.installment.unpaid": "Unpaid",
   "loan.installment.paid": "Paid",
+  "loan.installment.label": "Installment {n}",
+  "loan.installment.select": "Installment",
+  "loan.installment.none": "Not linked to an installment",
 
   "people.totalOwed": "Owes you",
   "people.totalOwe": "You owe them",
