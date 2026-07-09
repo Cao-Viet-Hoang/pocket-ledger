@@ -885,6 +885,18 @@
     return items;
   }
 
+  function upcomingMaturingSavings(limitDays = 14) {
+    const today = Fmt.today();
+    const items = [];
+    state.savings.forEach((sav) => {
+      if (savingsStatus(sav) !== 'active') return;
+      const diff = Fmt.daysBetween(today, Fmt.parseDate(sav.maturityDate));
+      if (diff <= limitDays) items.push({ savings: sav, kind: 'savings', diff });
+    });
+    items.sort((a, b) => a.diff - b.diff);
+    return items;
+  }
+
   function personTransactions(personId) {
     return state.transactions.filter((t) => t.personId === personId);
   }
@@ -997,6 +1009,7 @@
     totalReceivable,
     totalPayable,
     upcomingDueLoans,
+    upcomingMaturingSavings,
     personTransactions,
     personOwedToUser,
     personUserOwes,

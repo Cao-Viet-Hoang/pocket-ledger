@@ -5,7 +5,7 @@
 (function (global) {
   'use strict';
 
-  let currentFilter = 'all';
+  let currentFilter = 'active';
 
   const escapeHTML = Fmt.escapeHTML;
 

@@ -48,7 +48,24 @@
       </div>`;
   }
 
-  function dueRow({ loan, kind, diff, remaining, installment, installmentIndex, installmentTotal }) {
+  function dueRow(item) {
+    if (item.kind === 'savings') {
+      const sav = item.savings;
+      const hint = Fmt.formatDueHint(sav.maturityDate, I18n.getLang());
+      const badgeClass = hint.tone === 'expense' ? 'badge-expense' : (hint.tone === 'warning' ? 'badge-warning' : '');
+      const total = Number(sav.principal || 0) + Store.savingsInterestEarned(sav);
+      return `
+        <div class="due-item">
+          <span class="circle-icon purple" style="width:32px;height:32px;border-radius:10px" data-icon="vault"></span>
+          <div class="due-main">
+            <div class="due-title">${Fmt.escapeHTML(sav.name)}</div>
+            <div class="due-sub">${I18n.t('dash.savings.maturingHint')} • <span class="badge ${badgeClass}">${hint.text}</span></div>
+          </div>
+          <div class="due-amount text-income">${Fmt.formatAmount(total, { absolute: true })}</div>
+        </div>`;
+    }
+
+    const { loan, kind, remaining, installment, installmentIndex, installmentTotal } = item;
     const person = Store.getPersonById(loan.personId);
     const dueDate = installment ? installment.dueDate : loan.dueDate;
     const hint = Fmt.formatDueHint(dueDate, I18n.getLang());
@@ -224,7 +241,9 @@
       })
       .slice(0, 6);
 
-    const upcoming = Store.upcomingDueLoans(14).slice(0, 5);
+    const upcoming = [...Store.upcomingDueLoans(14), ...Store.upcomingMaturingSavings(14)]
+      .sort((a, b) => a.diff - b.diff)
+      .slice(0, 5);
 
     const accounts = Store.getAccounts();
     const activeSavings = Store.getSavings().filter((s) => Store.savingsStatus(s) !== 'withdrawn');
