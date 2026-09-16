@@ -183,13 +183,13 @@
 
   // ---------- Single-series expense bar chart (one bar per day) ----------
   // width=900 matches typical full-width card so font-size "9" scales ~1:1.
-  function expenseBars(series, { width = 900, height = 180, todayIndex = -1 } = {}) {
+  function expenseBars(series, { width = 900, height = 180, todayIndex = -1, avgValue = 0 } = {}) {
     if (!series.length) return '';
     const padL = 48, padR = 12, padT = 14, padB = 26;
     const chartW = width - padL - padR;
     const chartH = height - padT - padB;
 
-    const max = Math.max(1, ...series.map((d) => d.value || 0));
+    const max = Math.max(1, avgValue || 0, ...series.map((d) => d.value || 0));
     const niceMax = niceScale(max);
     const groupW = chartW / series.length;
     const barW = Math.max(2, Math.min(16, groupW - 2));
@@ -237,11 +237,24 @@
       })
       .join('');
 
+    const avgLine = avgValue > 0
+      ? (() => {
+          const avgYNum = padT + chartH - (avgValue / niceMax) * chartH;
+          const avgY = avgYNum.toFixed(1);
+          // Nudge the axis label away from the nearest tick label so the two never overlap.
+          const nearestTickDist = Math.min(...ticks.map((t) => Math.abs(t.y - avgYNum)));
+          const labelY = (nearestTickDist < 9 ? avgYNum - 9 : avgYNum).toFixed(1);
+          return `<line class="avg-line" x1="${padL}" x2="${width - padR}" y1="${avgY}" y2="${avgY}" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4"/>
+            <text x="${padL - 6}" y="${(Number(labelY) + 3).toFixed(1)}" text-anchor="end" font-size="9" font-weight="700" fill="#475569">${escapeHtml(Fmt.formatCompact(avgValue))}</text>`;
+        })()
+      : '';
+
     return `
       <svg class="chart-svg expense-day-bars" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" xmlns="${NS}">
         ${gridLines}
         ${tickLabels}
         ${barsHTML}
+        ${avgLine}
         ${xLabels}
       </svg>`;
   }

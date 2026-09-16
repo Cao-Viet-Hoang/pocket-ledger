@@ -358,6 +358,18 @@
   font-size: var(--fs-xs);
   color: #94a3b8;
 }
+.avg-legend-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-3);
+}
+.avg-legend-inline .avg-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 0;
+  border-top: 1.5px dashed var(--color-text-muted);
+}
 .chart-legend {
   display: flex;
   flex-direction: column;

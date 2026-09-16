@@ -261,6 +261,7 @@
       dailySeries.push({ value: dayExpense, label: showLabel ? String(d) : null });
     }
     const todayIndex = todayDay - 1;
+    const avgDailyExpense = todayDay > 0 ? Math.round(expenseMonth / todayDay) : 0;
 
     container.innerHTML = `
       <div class="page">
@@ -356,13 +357,16 @@
           <div class="card-header">
             <div>
               <div class="card-title" data-i18n="dash.dailyExpense"></div>
-              <div class="card-subtitle">${today.toLocaleString(I18n.getLang() === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })}</div>
+              <div class="card-subtitle">
+                ${today.toLocaleString(I18n.getLang() === 'vi' ? 'vi-VN' : 'en-US', { month: 'long', year: 'numeric' })}
+                ${expenseMonth > 0 ? `<span class="avg-legend-inline"><span class="avg-swatch"></span>${I18n.t('dash.dailyExpense.avg')}: ${Fmt.formatAmount(avgDailyExpense, { absolute: true })}</span>` : ''}
+              </div>
             </div>
             <div class="txn-amount expense">${expenseMonth > 0 ? Fmt.formatAmount(expenseMonth, { absolute: true }) : ''}</div>
           </div>
           <div class="expense-chart-wrap">
             ${expenseMonth > 0
-              ? Charts.expenseBars(dailySeries, { todayIndex })
+              ? Charts.expenseBars(dailySeries, { todayIndex, avgValue: avgDailyExpense })
               : `<div class="empty" style="padding:var(--space-6) 0">
                   <div class="empty-icon" data-icon="trending-down"></div>
                   <p class="text-muted" data-i18n="dash.dailyExpense.empty"></p>
